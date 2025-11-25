@@ -1,0 +1,33 @@
+# -------- Core --------
+numpy==1.26.4
+pandas==2.2.2
+python-dateutil==2.9.0.post0
+
+# -------- Data & Requests --------
+yfinance==0.2.43
+requests==2.32.3
+python-dotenv==1.0.1
+
+# -------- Feature Engineering / Tech Indicators --------
+ta==0.10.2
+scipy==1.11.4
+
+# -------- ML / Classic Models --------
+scikit-learn==1.5.2
+joblib==1.4.2
+
+# -------- Deep Learning (LSTM optional) --------
+tensorflow==2.17.0
+# torch==2.2.1   # optional fallback, falls du später PyTorch willst
+
+# -------- Visualization --------
+matplotlib==3.8.4
+seaborn==0.13.2
+plotly==5.22.0
+
+# -------- App (Frontend / Streamlit) --------
+streamlit==1.36.0
+
+# -------- Utilities --------
+pillow==10.3.0
+tqdm==4.66.4
