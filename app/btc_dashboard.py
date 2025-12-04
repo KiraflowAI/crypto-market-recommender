@@ -436,6 +436,88 @@ def create_candlestick_chart(df):
     return fig
 
 
+# def create_pca_scatter_plot(df, focus_date_str):
+#     """Erstellt einen interaktiven Scatter Plot der PCA-Komponenten (PC1 vs. PC2),
+#     eingefärbt nach dem Markt-Regime, und hebt den Fokus-Tag hervor. (Fix für den PCA Plot)"""
+    
+#     # Sicherstellen, dass PC1 und PC2 numerisch sind
+#     df['PC1'] = pd.to_numeric(df['PC1'], errors='coerce')
+#     df['PC2'] = pd.to_numeric(df['PC2'], errors='coerce')
+    
+#     df_plot = df.copy().dropna(subset=['PC1', 'PC2', 'Regime'])
+
+#     REGIME_COLOR_MAP = {
+#         'Bear': '#DC3545',      # Rot
+#         'Sideways': '#FFC107',  # Gelb
+#         'Bull': '#28A745',      # Grün
+#     }
+    
+#     fig = go.Figure()
+
+#     # 1. Historische Punkte nach Regime
+#     for regime, color in REGIME_COLOR_MAP.items():
+#         df_regime = df_plot[df_plot['Regime'] == regime]
+        
+#         # Base historical points
+#         fig.add_trace(go.Scatter(
+#             x=df_regime['PC1'],
+#             y=df_regime['PC2'],
+#             mode='markers',
+#             marker=dict(
+#                 size=5,
+#                 color=color,
+#                 opacity=0.6,
+#                 line=dict(width=0.5, color='DarkSlateGrey')
+#             ),
+#             name=f'Regime: {regime}',
+#             text=df_regime.index.strftime('%Y-%m-%d') + '<br>Regime: ' + df_regime['Regime'],
+#             hoverinfo='text+x+y'
+#         ))
+
+#     # 2. Fokus-Tag hervorheben
+#     # Datum in das gleiche Format konvertieren wie im Index, um den Vergleich zu ermöglichen
+#     focus_date_dt = pd.to_datetime(focus_date_str).strftime('%Y-%m-%d')
+    
+#     # Filtern nach dem Fokus-Tag im formatierten Index
+#     focus_data_match = df_plot[df_plot.index.strftime('%Y-%m-%d') == focus_date_dt]
+    
+#     if not focus_data_match.empty:
+#         focus_data = focus_data_match.iloc[0]
+        
+#         fig.add_trace(go.Scatter(
+#             x=[focus_data['PC1']],
+#             y=[focus_data['PC2']],
+#             mode='markers+text',
+#             marker=dict(
+#                 size=20,
+#                 color='#FBBF24', # Fokus-Farbe (Amber)
+#                 line=dict(width=3, color='black'),
+#                 symbol='star' # Stern-Symbol für den Fokus
+#             ),
+#             name='Fokus-Tag',
+#             text=[f'🎯 {focus_date_str} ({focus_data["Regime"]})'],
+#             textposition="top center",
+#             textfont=dict(size=14, color='black', weight='bold'),
+#             hoverinfo='text'
+#         ))
+
+
+#     # 3. Layout-Anpassungen
+#     fig.update_layout(
+#         title='Markt-Regime-Visualisierung (PC1 vs. PC2)',
+#         xaxis_title='PC1 (Trend-Achse: Bear ⬅️ ➡️ Bull)',
+#         yaxis_title='PC2 (Volatilitäts-Achse)',
+#         legend_title="Markt-Regime",
+#         height=650,
+#         template="plotly_white"
+#     )
+    
+#     # 4. Optional: Markierung des PC1-Durchschnitts zur Trennung von Bull/Bear
+#     fig.add_vline(x=df_plot['PC1'].mean(), line_width=1, line_dash="dash", line_color="gray", 
+#                   annotation_text="Historischer Durchschnitt PC1", annotation_position="bottom right")
+
+#     return fig
+
 def create_pca_scatter_plot(df, focus_date_str):
     """Erstellt einen interaktiven Scatter Plot der PCA-Komponenten (PC1 vs. PC2),
     eingefärbt nach dem Markt-Regime, und hebt den Fokus-Tag hervor. (Fix für den PCA Plot)"""
@@ -475,10 +557,7 @@ def create_pca_scatter_plot(df, focus_date_str):
         ))
 
     # 2. Fokus-Tag hervorheben
-    # Datum in das gleiche Format konvertieren wie im Index, um den Vergleich zu ermöglichen
     focus_date_dt = pd.to_datetime(focus_date_str).strftime('%Y-%m-%d')
-    
-    # Filtern nach dem Fokus-Tag im formatierten Index
     focus_data_match = df_plot[df_plot.index.strftime('%Y-%m-%d') == focus_date_dt]
     
     if not focus_data_match.empty:
@@ -495,9 +574,11 @@ def create_pca_scatter_plot(df, focus_date_str):
                 symbol='star' # Stern-Symbol für den Fokus
             ),
             name='Fokus-Tag',
+            # Behält den Dart-Emoji im Text bei
             text=[f'🎯 {focus_date_str} ({focus_data["Regime"]})'],
             textposition="top center",
-            textfont=dict(size=14, color='black', weight='bold'),
+            # HIER: Farbe auf WEISS und Größe auf 16 erhöht
+            textfont=dict(size=16, color='white', weight='bold'), 
             hoverinfo='text'
         ))
 
@@ -1196,160 +1277,154 @@ with tab_dir:
                 "➡️ **Werte nahe 0.0** sind **ideal** und weisen auf klar getrennte und kompakte Cluster hin. Er ist besonders nützlich, um die interne Kompaktheit zu bewerten."
             )
             
-            
+# --- Tab 2: Signal-Analyse & Analogien ---
+with tab2_new:
+    st.header("2. Signal-Analyse & Analogien")
+    
+    # Holen Sie sich das Signal des Fokus-Tages
+    focus_signal = df_master.loc[fokus_tag, 'Signal'] if fokus_tag in df_master.index and 'Signal' in df_master.columns else "N/A"
+    focus_regime = df_master.loc[fokus_tag, 'Regime'] if fokus_tag in df_master.index and 'Regime' in df_master.columns else "N/A"
+    
+    st.subheader(f"🎯 Fokus-Tag: **{fokus_tag}** (Regime: **{focus_regime}** | Signal: **{focus_signal}**)")
+    st.caption(f"Ähnlichkeitsanalyse basiert auf den Top **{top_k}** ähnlichsten Tagen.")
 
-    # --- Tab 2: Signal-Analyse & Analogien ---
-    with tab2_new:
-        st.header("2. Signal-Analyse & Analogien")
+    # -----------------------------------------------------------
+    # TEIL 1: ÄHNLICHKEITSANALYSE (ANALOGIEN)
+    # -----------------------------------------------------------
+    
+    focus_date_dt = pd.to_datetime(fokus_tag)
+    
+    # --- 1. Durchführung der Ähnlichkeitsanalyse ---
+    df_analogies, summary_metrics = find_analogies(df_master, focus_date_dt, top_k)
+    
+    st.markdown("---")
+    st.subheader("2.1 Historische Analogien (Was passierte nach ähnlichen Tagen?)")
+    
+    # ************************************************************
+    # HIER BEGINNT DIE ZENTRALE IF-ELSE-ABFRAGE
+    # ************************************************************
+    if not df_analogies.empty and summary_metrics['Tage analysiert'] > 0:
         
-        # Holen Sie sich das Signal des Fokus-Tages
-        focus_signal = df_master.loc[fokus_tag, 'Signal'] if fokus_tag in df_master.index and 'Signal' in df_master.columns else "N/A"
-        focus_regime = df_master.loc[fokus_tag, 'Regime'] if fokus_tag in df_master.index and 'Regime' in df_master.columns else "N/A"
+        # --- ZUSAMMENFASSUNG METRIKEN ---
+        summary_df = pd.DataFrame([summary_metrics]).T
+        summary_df.columns = ['Ergebnis']
         
-        st.subheader(f"🎯 Fokus-Tag: **{fokus_tag}** (Regime: **{focus_regime}** | Signal: **{focus_signal}**)")
-        st.caption(f"Ähnlichkeitsanalyse basiert auf den Top **{top_k}** ähnlichsten Tagen.")
+        summary_df.iloc[0, 0] = f"{int(summary_df.iloc[0, 0])} Tage"
+        summary_df.iloc[1, 0] = f"{summary_df.iloc[1, 0]:.2f} %"
+        summary_df.iloc[2, 0] = f"{summary_df.iloc[2, 0]:.2f} %"
+        summary_df.iloc[3, 0] = f"{summary_df.iloc[3, 0]:.2f} %"
 
-        # -----------------------------------------------------------
-        # TEIL 1: ÄHNLICHKEITSANALYSE (ANALOGIEN)
-        # -----------------------------------------------------------
+        st.dataframe(summary_df, use_container_width=True)
         
-        focus_date_dt = pd.to_datetime(fokus_tag)
-        
-        # --- 1. Durchführung der Ähnlichkeitsanalyse ---
-        df_analogies, summary_metrics = find_analogies(df_master, focus_date_dt, top_k)
+        # --- DYNAMISCHE INTERPRETATION ---
+        anteil_up = summary_metrics['Anteil Up (7d)']
+        avg_return = summary_metrics['Durchschn. 7d Return (Real)']
         
         st.markdown("---")
-        st.subheader("2.1 Historische Analogien (Was passierte nach ähnlichen Tagen?)")
+        st.subheader("Interpretation der historischen Unterstützung")
         
-        if not df_analogies.empty and summary_metrics['Tage analysiert'] > 0:
-            
-            # --- ZUSAMMENFASSUNG METRIKEN ---
-            summary_df = pd.DataFrame([summary_metrics]).T
-            summary_df.columns = ['Ergebnis']
-            
-            summary_df.iloc[0, 0] = f"{int(summary_df.iloc[0, 0])} Tage"
-            summary_df.iloc[1, 0] = f"{summary_df.iloc[1, 0]:.2f} %"
-            summary_df.iloc[2, 0] = f"{summary_df.iloc[2, 0]:.2f} %"
-            summary_df.iloc[3, 0] = f"{summary_df.iloc[3, 0]:.2f} %"
-
-            st.dataframe(summary_df, use_container_width=True)
-            
-            # --- DYNAMISCHE INTERPRETATION ---
-            anteil_up = summary_metrics['Anteil Up (7d)']
-            avg_return = summary_metrics['Durchschn. 7d Return (Real)']
-            
-            st.markdown("---")
-            st.subheader("Interpretation der historischen Unterstützung")
-            
-            if focus_signal == '📈 Up':
-                if anteil_up >= 70:
-                    analogy_interpretation = f"👍 **Starke Bullish-Bestätigung:** In **{anteil_up:.0f}%** der ähnlichen Fälle stieg der Preis. Der durchschnittliche reale Zuwachs betrug **{avg_return:.2f}%**. Die Historie **unterstützt** das 'Up'-Signal stark."
-                    st.success(analogy_interpretation)
-                elif anteil_up <= 30:
-                    analogy_interpretation = f"👎 **Widerspruch (Fehlalarm-Risiko):** Nur in **{anteil_up:.0f}%** der Fälle stieg der Preis. Der durchschnittliche reale Return ist **{avg_return:.2f}%**. Die Historie **widerlegt** das 'Up'-Signal stark."
-                    st.error(analogy_interpretation)
-                else:
-                    analogy_interpretation = f"⚠️ **Unklare Unterstützung:** Die Historie ist mit **{anteil_up:.0f}%** Up-Tagen gemischt. **Vorsicht** ist geboten, da die Analogie keine klare Richtung liefert."
-                    st.warning(analogy_interpretation)
-
-            elif focus_signal == '📉 Down':
-                if anteil_up <= 30:
-                    analogy_interpretation = f"👍 **Starke Bearish-Bestätigung:** Nur in **{anteil_up:.0f}%** der ähnlichen Fälle stieg der Preis (d.h. er fiel in {100-anteil_up:.0f}% der Fälle). Der durchschnittliche reale Return ist **{avg_return:.2f}%** (meist negativ). Die Historie **unterstützt** das 'Down'-Signal stark."
-                    st.success(analogy_interpretation)
-                elif anteil_up >= 70:
-                    analogy_interpretation = f"👎 **Widerspruch (Hohes Risiko):** In **{anteil_up:.0f}%** der Fälle stieg der Preis, obwohl das Modell 'Down' sagt. Der durchschnittliche reale Return ist **{avg_return:.2f}%** (meist positiv). Die Historie **widerlegt** das 'Down'-Signal stark."
-                    st.error(analogy_interpretation)
-                else:
-                    analogy_interpretation = f"⚠️ **Unklare Unterstützung:** Die Historie ist mit **{anteil_up:.0f}%** Up-Tagen gemischt. **Vorsicht** ist geboten, da die Analogie keine klare Richtung liefert."
-                    st.warning(analogy_interpretation)
+        if focus_signal == '📈 Up':
+            if anteil_up >= 70:
+                analogy_interpretation = f"👍 **Starke Bullish-Bestätigung:** In **{anteil_up:.0f}%** der ähnlichen Fälle stieg der Preis. Der durchschnittliche reale Zuwachs betrug **{avg_return:.2f}%**. Die Historie **unterstützt** das 'Up'-Signal stark."
+                st.success(analogy_interpretation)
+            elif anteil_up <= 30:
+                analogy_interpretation = f"👎 **Widerspruch (Fehlalarm-Risiko):** Nur in **{anteil_up:.0f}%** der Fälle stieg der Preis. Der durchschnittliche reale Return ist **{avg_return:.2f}%**. Die Historie **widerlegt** das 'Up'-Signal stark."
+                st.error(analogy_interpretation)
             else:
-                 analogy_interpretation = "⚠️ **Kein klares Signal:** Das ML-Modell lieferte kein klares Up/Down-Signal, daher kann die Analogie nur die historische Verteilung zeigen."
-                 st.warning(analogy_interpretation)
+                analogy_interpretation = f"⚠️ **Unklare Unterstützung:** Die Historie ist mit **{anteil_up:.0f}%** Up-Tagen gemischt. **Vorsicht** ist geboten, da die Analogie keine klare Richtung liefert."
+                st.warning(analogy_interpretation)
 
-            st.markdown("---")
-            st.markdown(f"### 📋 Details der Top {top_k} Analogien")
-            
-            analogy_cols = ['Regime', 'PC1', 'PC2', 'Distance', 'Close', 'Return', 'Real_Return_7d']
-            
-            df_analogy_display = df_analogies[[col for col in analogy_cols if col in df_analogies.columns]].copy()
-            
-            # Formatting for display
-            df_analogy_display['PC1'] = df_analogy_display['PC1'].apply(lambda x: f'{x:.3f}')
-            df_analogy_display['PC2'] = df_analogy_display['PC2'].apply(lambda x: f'{x:.3f}')
-            df_analogy_display['Close'] = df_analogy_display['Close'].apply(lambda x: f'{x:,.2f}')
-            df_analogy_display['Return'] = df_analogy_display['Return'].apply(lambda x: f'{x:.4f}')
-            # Korrektur: Formatiere den tatsächlichen Return in Prozent
-            df_analogy_display['Real_Return_7d'] = df_analogy_display['Real_Return_7d'].apply(lambda x: f'{x*100:.2f} %') 
-            df_analogy_display['Distance'] = df_analogy_display['Distance'].apply(lambda x: f'{x:.3f}')
-            
-            df_analogy_display.rename(columns={
-                'Distance': 'Ähnlichkeit (Abstand)',
-                'Real_Return_7d': 'Tatsächlicher 7d Return (Real)',
-                'Close': 'Schlusskurs',
-                'Return': 'Tägl. Return'
-            }, inplace=True)
-            
-            # Wende das Highlight-Styling auf die Spalte an
-            st.dataframe(
-                df_analogy_display.style.apply(highlight_return_analogy, axis=0).apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), 
-                use_container_width=True
-            )
-            
-            # # NEUE ERKLÄRUNG DER ZAHLEN UNTER DER TABELLE
-            # st.markdown("### 📊 Bedeutung der Kennzahlen in der Analogie-Tabelle")
-            # st.markdown(
-            #     "| Kennzahl | Bedeutung | Idealer Wert |\n"
-            #     "|:---|:---|:---|\n"
-            #     "| **Ähnlichkeit (Abstand)** | Der euklidische Abstand zwischen dem **Fokus-Tag** und diesem historischen Tag im PCA-Raum (PC1/PC2). | **Niedriger** (Nahe 0.0) ist besser |\n"
-            #     "| **PC1 / PC2** | Die **Marktposition** an diesem historischen Tag. Zeigt, ob der Tag tatsächlich dem **Fokus-Tag** ähnelt. | Nahe den PC1/PC2 Werten des Fokus-Tages |\n"
-            #     "| **Tatsächlicher 7d Return (Real)** | Die tatsächliche prozentuale Preisänderung, die **in den 7 Tagen** nach diesem historischen Tag (der Analogie) eingetreten ist. | **Positiv** bei starker Unterstützung, **Negativ** bei starker Ablehnung des Signals |"
-            # )
-
-# NEUE ERKLÄRUNG DER ZAHLEN UNTER DER TABELLE (KORRIGIERT UND ERWEITERT)
-            st.markdown("### 📊 Bedeutung der Kennzahlen in der Analogie-Tabelle")
-            st.info(
-                "Die Analogiebildung basiert auf dem **euklidischen Abstand** zwischen der aktuellen Marktstruktur (dem Fokus-Tag) und historischen Tagen im PCA-Raum (PC1/PC2). **Je niedriger der Abstand, desto ähnlicher sind die Tage**."
-            )
-            
-            st.markdown("---")
-
-            # Erklärung des K-Sliders
-            st.markdown("#### ⚙️ Der Top-K Slider (Anzahl ähnlicher Tage)")
-            st.markdown(
-                "Der Slider **Anzahl ähnlicher Tage (Top-K)** bestimmt, wie viele historische Tage mit dem **geringsten Abstand** (der höchsten Ähnlichkeit) zum Fokus-Tag in der Tabelle angezeigt werden.\n\n"
-                "➡️ **Niedrige K-Werte (z.B. K=1 bis 10):** Fokussiert sich auf die **stärksten** Analogien. Die Ergebnisse sind präziser, aber sensibler gegenüber Ausreißern.\n"
-                "➡️ **Hohe K-Werte (z.B. K=50 bis 100):** Liefert einen **durchschnittlichen** Eindruck des historischen Verhaltens unter *ähnlichen* Marktbedingungen. Glättet Extremwerte, verwässert aber die stärksten Signale."
-            )
-
-            st.markdown("---")
-            
-            st.markdown("#### Kennzahlen in der Tabelle")
-
-            # 1. Ähnlichkeit (Abstand)
-            st.markdown("##### 1. Ähnlichkeit (Abstand)")
-            st.markdown(
-                "Dies ist der **euklidische Abstand** zwischen dem **Fokus-Tag** und diesem historischen Tag im PCA-Raum (PC1/PC2).\n"
-                "➡️ **Idealer Wert:** **Niedriger** (Nahe 0.0) ist besser, da dies eine stärkere Korrelation der Marktstrukturen signalisiert."
-            )
-            
-            # 2. PC1 / PC2
-            st.markdown("##### 2. PC1 / PC2 (Marktposition)")
-            st.markdown(
-                "Diese Werte geben die **Marktposition** an diesem historischen Tag im zweidimensionalen PCA-Raum an.\n"
-                "➡️ **Bedeutung:** Sie zeigen, ob der historische Tag tatsächlich in derselben Region des PCA-Raums liegt wie der Fokus-Tag. Die Werte sollten **nahe den PC1/PC2 Werten des Fokus-Tages** liegen."
-            )
-            
-            # 3. Tatsächlicher 7d Return (Real)
-            st.markdown("##### 3. Tatsächlicher 7d Return (Real)")
-            st.markdown(
-                "Dies ist die **tatsächliche prozentuale Preisänderung**, die **in den 7 Tagen nach** diesem historischen Tag (der Analogie) eingetreten ist.\n"
-                "➡️ **Interpretation:** Die Spalte dient zur Prognose. Wenn die Mehrheit der Top-K-Tage einen **positiven** Return zeigte, deutet dies auf eine historische Wahrscheinlichkeit für einen Preisanstieg in der kommenden Woche hin."
-            )
-
+        elif focus_signal == '📉 Down':
+            if anteil_up <= 30:
+                analogy_interpretation = f"👍 **Starke Bearish-Bestätigung:** Nur in **{anteil_up:.0f}%** der ähnlichen Fälle stieg der Preis (d.h. er fiel in {100-anteil_up:.0f}% der Fälle). Der durchschnittliche reale Return ist **{avg_return:.2f}%** (meist negativ). Die Historie **unterstützt** das 'Down'-Signal stark."
+                st.success(analogy_interpretation)
+            elif anteil_up >= 70:
+                analogy_interpretation = f"👎 **Widerspruch (Hohes Risiko):** In **{anteil_up:.0f}%** der Fälle stieg der Preis, obwohl das Modell 'Down' sagt. Der durchschnittliche reale Return ist **{avg_return:.2f}%** (meist positiv). Die Historie **widerlegt** das 'Down'-Signal stark."
+                st.error(analogy_interpretation)
+            else:
+                analogy_interpretation = f"⚠️ **Unklare Unterstützung:** Die Historie ist mit **{anteil_up:.0f}%** Up-Tagen gemischt. **Vorsicht** ist geboten, da die Analogie keine klare Richtung liefert."
+                st.warning(analogy_interpretation)
         else:
-            st.warning("Keine Analogien gefunden oder unzureichende historische Daten vorhanden, um die Analyse durchzuführen.")
-            
-            
+             analogy_interpretation = "⚠️ **Kein klares Signal:** Das ML-Modell lieferte kein klares Up/Down-Signal, daher kann die Analogie nur die historische Verteilung zeigen."
+             st.warning(analogy_interpretation)
+
+        st.markdown("---")
+        st.markdown(f"### 📋 Details der Top {top_k} Analogien")
+        
+        analogy_cols = ['Regime', 'PC1', 'PC2', 'Distance', 'Close', 'Return', 'Real_Return_7d']
+        
+        df_analogy_display = df_analogies[[col for col in analogy_cols if col in df_analogies.columns]].copy()
+        
+        # Formatting for display
+        df_analogy_display['PC1'] = df_analogy_display['PC1'].apply(lambda x: f'{x:.3f}')
+        df_analogy_display['PC2'] = df_analogy_display['PC2'].apply(lambda x: f'{x:.3f}')
+        df_analogy_display['Close'] = df_analogy_display['Close'].apply(lambda x: f'{x:,.2f}')
+        df_analogy_display['Return'] = df_analogy_display['Return'].apply(lambda x: f'{x:.4f}')
+        # Korrektur: Formatiere den tatsächlichen Return in Prozent
+        df_analogy_display['Real_Return_7d'] = df_analogy_display['Real_Return_7d'].apply(lambda x: f'{x*100:.2f} %') 
+        df_analogy_display['Distance'] = df_analogy_display['Distance'].apply(lambda x: f'{x:.3f}')
+        
+        df_analogy_display.rename(columns={
+            'Distance': 'Ähnlichkeit (Abstand)',
+            'Real_Return_7d': 'Tatsächlicher 7d Return (Real)',
+            'Close': 'Schlusskurs',
+            'Return': 'Tägl. Return'
+        }, inplace=True)
+        
+        # Wende das Highlight-Styling auf die Spalte an
+        st.dataframe(
+            df_analogy_display.style.apply(highlight_return_analogy, axis=0).apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), 
+            use_container_width=True
+        )
+        
+        # NEUE ERKLÄRUNG DER ZAHLEN UNTER DER TABELLE (ULTIMATIV KORRIGIERT)
+        st.markdown("### 📊 Bedeutung der Kennzahlen in der Analogie-Tabelle")
+        st.info(
+            "Die Analogiebildung basiert auf der **Hauptkomponentenanalyse (PCA)**, welche die Marktstruktur (Indikatoren wie MAs, Momentum und Volatilität) auf zwei Hauptachsen **PC1** und **PC2** verdichtet. "
+            "Der gesuchte **euklidische Abstand** ist die direkte, geometrische Distanz zwischen dem **Fokus-Tag** und einem historischen Tag im **PCA-Raum** (der zweidimensionalen Landkarte). **Je niedriger der Abstand, desto ähnlicher sind die Tage.**"
+        )
+
+        st.markdown("---")
+
+        # Erklärung des K-Sliders
+        st.markdown("#### ⚙️ Der Top-K Slider (Anzahl ähnlicher Tage)")
+        st.markdown(
+            "Der Slider **Anzahl ähnlicher Tage (Top-K)** bestimmt, wie viele historische Tage mit dem **geringsten Abstand** (der höchsten Ähnlichkeit) zum Fokus-Tag in der Tabelle angezeigt werden.\n\n"
+            "➡️ **Niedrige K-Werte (z.B. K=1 bis 10):** Fokussiert sich auf die **stärksten** Analogien. Die Ergebnisse sind präziser, aber sensibler gegenüber Ausreißern.\n"
+            "➡️ **Hohe K-Werte (z.B. K=50 bis 100):** Liefert einen **durchschnittlichen** Eindruck des historischen Verhaltens unter *ähnlichen* Marktbedingungen. Glättet Extremwerte, verwässert aber die stärksten Signale."
+        )
+
+        st.markdown("---")
+                    
+        st.markdown("#### Kennzahlen in der Tabelle")
+
+        # 1. Ähnlichkeit (Abstand)
+        st.markdown("##### 1. Ähnlichkeit (Abstand)")
+        st.markdown(
+            "Dies ist der **euklidische Abstand** zwischen dem **Fokus-Tag** und diesem historischen Tag im PCA-Raum (PC1/PC2). Dieser Wert ist die **Basis** für das Ranking.\n"
+            "➡️ **Idealer Wert:** **Niedriger** (Nahe 0.0) ist besser, da dies eine stärkere Korrelation der Marktstrukturen signalisiert."
+        )
+                    
+        # 2. PC1 / PC2 (Marktposition) - FINAL KORRIGIERT
+        st.markdown("##### 2. PC1 / PC2 (Marktposition)")
+        st.markdown(
+            "Diese Werte sind die Koordinaten der **Marktposition** an diesem historischen Tag im PCA-Raum.\n"
+            "Die Komponenten fassen Indikatoren wie `MAs`, `Momentum` und `Volatilität` zusammen.\n\n"
+            "**Aussage am Markt:**\n"
+            "* **PC1 (Trend/Struktur):** Repräsentiert die **Bullische Dynamik** (X-Achse). Hohe positive Werte bedeuten einen starken Aufwärtstrend (z.B. Preis über `MA50`/`MA200`).\n"
+            "* **PC2 (Volatilität/Chaos):** Repräsentiert die **Schwankungsbreite** (Y-Achse). Hohe Werte bedeuten turbulente, unsichere Märkte (hohe `Volatility30`).\n\n"
+            "➡️ **Bedeutung:** Die PC1/PC2-Werte in der Tabelle sollten **sehr nahe** an den Werten des Fokus-Tages liegen. Das bestätigt, dass die Analogie **strukturell** passt. "
+        )
+                    
+        # 3. Tatsächlicher 7d Return (Real)
+        st.markdown("##### 3. Tatsächlicher 7d Return (Real)")
+        st.markdown(
+            "Dies ist die **tatsächliche prozentuale Preisänderung**, die **in den 7 Tagen nach** diesem historischen Tag (der Analogie) eingetreten ist.\n"
+            "➡️ **Interpretation:** Die Spalte dient zur Prognose. Wenn die Mehrheit der Top-K-Tage einen **positiven** Return zeigte, deutet dies auf eine historische Wahrscheinlichkeit für einen Preisanstieg in der kommenden Woche hin."
+        )
+
+        st.markdown("---") # Visuelle Trennung des Erklärungsblocks
+        
         # -----------------------------------------------------------
         # TEIL 2: SIGNAL-ANALYSE (ERKLÄRUNG)
         # -----------------------------------------------------------
@@ -1369,30 +1444,188 @@ with tab_dir:
             "#### 3. Interpretation der Ergebnisse (Ihre Frage)\n"
             "Die **Metriken** der Analogien dienen als **Konfidenz-Filter** für die ML-Prognose (siehe die Zusammenfassung oben)."
         )
+    
+    
+# # --- Tab 4: MARKT-VISUALISIERUNG (PCA/Cluster) ---
+#     with tab4_new:
+#         st.header("4. Markt-Visualisierung (PCA/Cluster)")
+#         st.markdown("### 🗺️ Die Position des Fokus-Tags im Markt-Regime-Raum")
+        
+#         # LOKALE ÜBERSCHREIBUNG: Eindeutige Datumsauswahl nur für die PCA
+#         st.markdown("---")
+        
+#         # *WICHTIG:* Wir nutzen das global definierte end_date als Standardwert
+#         # und die bereits vorbereitete Liste date_dt_list
+#         fokus_datum_pca = st.date_input(
+#             "📆 Wählen Sie den FOKUS-TAG für die PCA-Visualisierung:",
+#             value=end_date, # Nutzt das Enddatum des globalen Sliders als Standard
+#             min_value=date_dt_list[0],
+#             max_value=date_dt_list[-1],
+#             key='fokus_pca_selector'
+#         )
+        
+#         # Definiere den lokalen Fokus-Tag, der nur hier verwendet wird
+#         fokus_tag_pca = fokus_datum_pca.strftime('%Y-%m-%d')
+
+#         st.info(f"Visualisierter Fokus-Tag: **{fokus_tag_pca}**")
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # NEUER ERKLÄRUNGSBLOCK (OPTIMIERT FÜR PRÄSENTATION)
+#         # -----------------------------------------------------------------
+#         st.subheader("Detaillierte Erläuterung der Marktstruktur-Visualisierung")
+#         st.markdown(
+#             "Diese Ansicht basiert auf der **Hauptkomponentenanalyse (PCA)**. Die PCA reduziert die Komplexität von über zwanzig technischen Indikatoren auf zwei Hauptachsen. "
+#             "Das Ergebnis ist eine **zweidimensionale Landkarte** des Marktes, die es uns ermöglicht, die aktuelle Marktphase (**Stern/Target**) im Kontext der gesamten historischen Bewegung visuell einzuordnen. "
+#         )
+        
+#         st.markdown("---")
+        
+#         st.subheader("1. Die drei Komponenten der Visualisierung")
+#         st.markdown(
+#             "#### a) Datenbasis (Die Historischen Punkte)\n"
+#             "**Jeder einzelne Punkt** auf der Grafik repräsentiert die **Marktstruktur eines Handelstages** in unserem Datensatz. Diese Punkte bilden die **historische Datenbank** aller jemals aufgetretenen Marktbedingungen."
+#         )
+#         st.markdown(
+#             "#### b) Markt-Regime (Die Farb-Cluster)\n"
+#             "Die Punkte sind mithilfe von Clustering-Algorithmen in **farbige Cluster** (Regime) gruppiert. Ein Cluster fasst Tage mit **statistisch ähnlicher technischer Struktur** zusammen. "
+#             "**Fazit:** Tage innerhalb desselben Clusters teilen typischerweise ähnliche Verhaltensmuster, was für die Prognose essenziell ist."
+#         )
+#         st.markdown(
+#             f"#### c) Der Fokus-Tag (⭐/🎯 Target)\n"
+#             f"Der große, hervorgehobene **Stern** (**⭐** oder **🎯**) zeigt die **exakte Position** des aktuell gewählten **Fokus-Tages ({fokus_tag_pca})** im Markt-Regime-Raum. "
+#             "Seine Position im Verhältnis zu den Clustern bestätigt das von unserem Modell zugewiesene Markt-Regime und dient als visueller Startpunkt für die Analogien-Analyse."
+#         )
+        
+#         # -----------------------------------------------------------------
+#         # VISUALISIERUNG UND ACHSEN-ERKLÄRUNG
+#         # -----------------------------------------------------------------
+
+#         # pca_fig = create_pca_scatter_plot(df_master, fokus_tag) <-- Veraltet
+#         pca_fig = create_pca_scatter_plot(df_master, fokus_tag_pca) # <-- Neu: Nutzt den lokalen Tag
+#         st.plotly_chart(pca_fig, use_container_width=True)
+
+#         st.markdown("---")
+#         st.subheader("2. Interpretation der Achsen (PC1 & PC2)")
+#         st.markdown(
+#             "➡️ **X-Achse (PC1): Trend-Komponente (Dominante Marktrichtung).** Repräsentiert die primäre Stärke des Trends. "
+#             "Bewegung nach **rechts** signalisiert eine Zunahme der **bullischen Dynamik** (starker Aufwärtstrend). Bewegung nach **links** signalisiert eine starke **bearishe** Tendenz (Abwärtstrend).\n"
+#             "➡️ **Y-Achse (PC2): Volatilitäts-Komponente (Markt-Unsicherheit).** Repräsentiert die Schwankungsbreite und das Rauschen im Markt. "
+#             "Eine **hohe** Position (oben) deutet auf hohe **Volatilität** und Unsicherheit hin. Niedrige Positionen (unten) stehen für ruhige, stabile Marktphasen.\n"
+#             f"➡️ **Stern/Target (⭐/🎯):** Seine Position in diesem Koordinatensystem liefert die Grundlage für die Analogie-Suche in **Tab 2**."
+#         )
+        
+# --- Tab 4: MARKT-VISUALISIERUNG (PCA/Cluster) ---
 
     # --- Tab 4: MARKT-VISUALISIERUNG (PCA/Cluster) ---
-    with tab4_new:
-        st.header("4. Markt-Visualisierung (PCA/Cluster)")
-        st.markdown("### 🗺️ Die Position des Fokus-Tags im Markt-Regime-Raum")
-        
-        st.info("Diese Visualisierung zeigt, wo sich die aktuelle Marktstruktur (der Fokus-Tag) im Vergleich zur gesamten Historie befindet. ")
-        
-        pca_fig = create_pca_scatter_plot(df_master, fokus_tag)
-        st.plotly_chart(pca_fig, use_container_width=True)
+with tab4_new:
+    st.header("4. Markt-Visualisierung (PCA/Cluster)")
+    st.markdown("### 🗺️ Die Position des Fokus-Tags im Markt-Regime-Raum")
+    
+    # LOKALE ÜBERSCHREIBUNG: Eindeutige Datumsauswahl nur für die PCA
+    st.markdown("---")
+    
+    # *WICHTIG:* Wir nutzen das global definierte end_date als Standardwert
+    # und die bereits vorbereitete Liste date_dt_list
+    fokus_datum_pca = st.date_input(
+        "📆 Wählen Sie den FOKUS-TAG für die PCA-Visualisierung:",
+        value=end_date, # Nutzt das Enddatum des globalen Sliders als Standard
+        min_value=date_dt_list[0],
+        max_value=date_dt_list[-1],
+        key='fokus_pca_selector'
+    )
+    
+    # Definiere den lokalen Fokus-Tag, der nur hier verwendet wird
+    fokus_tag_pca = fokus_datum_pca.strftime('%Y-%m-%d')
 
-        st.markdown("---")
-        st.subheader("Erklärung der Achsen")
-        st.markdown(
-            "➡️ **X-Achse (PC1):** Repräsentiert den Haupttrend. Bewegung nach **rechts** bedeutet Zunahme der bullischen Dynamik.\n"
-            "➡️ **Y-Achse (PC2):** Repräsentiert die Volatilität und das Chaos. **Höhe** bedeutet höhere Schwankungsbreite.\n"
-            "➡️ **Stern (🎯):** Ihr **Fokus-Tag** ist hervorgehoben. Seine Position bestätigt das zugewiesene Markt-Regime."
-        )
+    st.info(f"Visualisierter Fokus-Tag: **{fokus_tag_pca}**")
+    st.markdown("---")
+    
+    # -----------------------------------------------------------------
+    # NEUER ERKLÄRUNGSBLOCK (OPTIMIERT FÜR PRÄSENTATION)
+    # -----------------------------------------------------------------
+    st.subheader("Erläuterung der Marktstruktur-Visualisierung")
+    st.markdown(
+        "Diese Ansicht basiert auf der **Hauptkomponentenanalyse (PCA)**. Die PCA reduziert die Komplexität von über zwanzig technischen Indikatoren auf zwei Hauptachsen. "
+        "Das Ergebnis ist eine **zweidimensionale Landkarte** des Marktes, die es uns ermöglicht, die aktuelle Marktphase (**Stern/Target**) im Kontext der gesamten historischen Bewegung visuell einzuordnen. "
+    )
+    
+    # -----------------------------------------------------------------
+    # VISUALISIERUNG UND ACHSEN-ERKLÄRUNG
+    # -----------------------------------------------------------------
 
-    # --- Tab 5: EXPLORATIVE ANALYSE (EDA) ---
+    pca_fig = create_pca_scatter_plot(df_master, fokus_tag_pca) # Nutzt nun die Funktion mit weißem Text
+    st.plotly_chart(pca_fig, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("1. Interpretation der Achsen (PC1 & PC2)")
+    st.markdown(
+        "➡️ **X-Achse (PC1): Trend-Komponente (Dominante Marktrichtung).** Repräsentiert die primäre Stärke des Trends. "
+        "Bewegung nach **rechts** signalisiert eine Zunahme der **bullischen Dynamik** (starker Aufwärtstrend). Bewegung nach **links** signalisiert eine starke **bearishe** Tendenz (Abwärtstrend).\n\n"
+        
+        "➡️ **Y-Achse (PC2): Volatilitäts-Komponente (Markt-Unsicherheit).** Repräsentiert die Schwankungsbreite und das Rauschen im Markt. "
+        "Eine **hohe** Position (oben) deutet auf hohe **Volatilität** und Unsicherheit hin. Niedrige Positionen (unten) stehen für ruhige, stabile Marktphasen.\n\n"
+        
+        f"➡️ **Stern/Target (⭐/🎯):** Seine Position in diesem Koordinatensystem liefert die Grundlage für die Analogie-Suche in **Tab 2**."
+    )
+    
+    # -----------------------------------------------------------------
+    # NEU: BEISPIELANALYSE DER PC-WERTE
+    # -----------------------------------------------------------------
+    
+    st.markdown("--")
+    
+    st.subheader("2. Interpretation der Koordinaten (PC-Werte)")
+    st.markdown(
+        "Wenn Sie über einen Punkt (einen Tag) fahren, sehen Sie dessen exakte **Koordinaten** (PC1- und PC2-Werte). Diese Werte sind normiert, liegen also typischerweise zwischen ca. -0.1 und +0.1."
+    )
+    
+    st.markdown("#### 📈 PC1-Werte (Trend-Komponente)")
+    st.markdown(
+        "* **Hoher PC1-Wert (positiv, z.B. $> 0.05$):** Der Tag weist eine **stark bullische Struktur** auf (hohes Momentum, weit über gleitenden Durchschnitten). Der Markt bewegte sich dominant nach oben.\n"
+        "* **Niedriger PC1-Wert (negativ, z.B. $< -0.05$):** Der Tag weist eine **stark bearishe Struktur** auf. Der Markt befand sich in einem deutlichen Abwärtstrend.\n"
+        "* **PC1 nahe Null:** Der Tag hatte eine **neutrale** (seitwärts gerichtete) Trendstruktur."
+    )
+    
+    st.markdown("#### 🌪️ PC2-Werte (Volatilitäts-Komponente)")
+    st.markdown(
+        "* **Hoher PC2-Wert (positiv, z.B. $> 0.04$):** Der Tag hatte eine **sehr hohe Volatilität** (hohe Schwankungsbreite, große Kerzen). Dies deutet oft auf Phasen von **Angst oder Gier** hin.\n"
+        "* **Niedriger PC2-Wert (negativ oder nahe Null):** Der Tag war **ruhig und stabil** (niedrige Volatilität). Niedrige Werte bedeuten oft geringes Handelsinteresse oder eine Konsolidierungsphase."
+    )
+    
+    st.markdown("---")
+    st.markdown("#### 💡 Konkretes Beispiel")
+    st.markdown(
+        "Nehmen wir an, der **Fokus-Tag** zeigt die Koordinaten **PC1 = 0.065** und **PC2 = 0.015**:\n"
+        "1.  **PC1 (0.065):** Der Wert ist hoch und positiv. Interpretation: **Stark bullischer Trend** am Markt.\n"
+        "2.  **PC2 (0.015):** Der Wert ist niedrig (nahe Null). Interpretation: **Niedrige bis moderate Volatilität**.\n"
+        "**Gesamt:** Der Tag befand sich in einem **starken, aber relativ ruhigen Aufwärtstrend** (Regime wahrscheinlich 'Bull')."
+    )
+    
+    st.markdown("---")
+    
+    st.subheader("3. Die drei Komponenten der Visualisierung")
+    st.markdown(
+        "#### a) Datenbasis (Die Historischen Punkte)\n"
+        "**Jeder einzelne Punkt** auf der Grafik repräsentiert die **Marktstruktur eines Handelstages** in unserem Datensatz. Diese Punkte bilden die **historische Datenbank** aller jemals aufgetretenen Marktbedingungen."
+    )
+    st.markdown(
+        "#### b) Markt-Regime (Die Farb-Cluster)\n"
+        "Die Punkte sind mithilfe von Clustering-Algorithmen in **farbige Cluster** (Regime) gruppiert. Ein Cluster fasst Tage mit **statistisch ähnlicher technischer Struktur** zusammen. "
+        "**Fazit:** Tage innerhalb desselben Clusters teilen typischerweise ähnliche Verhaltensmuster, was für die Prognose essenziell ist."
+    )
+    st.markdown(
+        f"#### c) Der Fokus-Tag (⭐/🎯 Target)\n"
+        f"Der große, hervorgehobene **Stern** (**⭐** oder **🎯**) zeigt die **exakte Position** des aktuell gewählten **Fokus-Tages ({fokus_tag_pca})** im Markt-Regime-Raum. "
+        "Seine Position im Verhältnis zu den Clustern bestätigt das von unserem Modell zugewiesene Markt-Regime und dient als visueller Startpunkt für die Analogien-Analyse."
+    )
+    
+
     with tab5_new:
         st.header("5. Explorative Analyse (EDA)")
         st.info("Dieser Tab ist für zukünftige erweiterte Analysen, z.B. Feature-Wichtigkeiten, gedacht.")
         st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
+
 
 # ==================================================================================================
 # ENDE
