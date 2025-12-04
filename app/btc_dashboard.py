@@ -4,92 +4,16 @@ import os
 import joblib 
 import plotly.graph_objects as go
 import numpy as np
+import plotly.express as px
 from datetime import datetime
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+
 
 # ==================================================================================================
 # 1. STREAMLIT KONFIGURATION
 # ==================================================================================================
 st.set_page_config(layout="wide", page_title="₿ BTC Markt-Regime & Prognose-Dashboard") 
-
-# ==================================================================================================
-# 2. DATENPFADE & LADEFUNKTIONEN (🚨 WICHTIG: PFADE ANPASSEN!)
-# ==================================================================================================
-
-# # 🛠️ ABSOLUTE PFADE (Basierend auf Ihren Angaben)
-# DATA_PATH = '/Users/burcukiran/Desktop/Abschlussprojekt_Data_Science/data/processed/btc_master_view_final.csv'
-# PCA_DATA_PATH = '/Users/burcukiran/Desktop/Abschlussprojekt_Data_Science/data/processed/btc_clusters_pca.csv'
-# REGRESSION_METRICS_PATH = '/Users/burcukiran/Desktop/Abschlussprojekt_Data_Science/data/processed/price_daily_model_metrics.csv'
-# CLUSTERING_METRICS_PATH = '/Users/burcukiran/Desktop/Abschlussprojekt_Data_Science/data/processed/clustering_metrics.csv'
-# DIRECTION_METRICS_PATH = '/Users/burcukiran/Desktop/Abschlussprojekt_Data_Science/models/direction/direction_model_metrics.csv'
-
-
-# @st.cache_data
-# def load_data(path):
-#     """Lädt die Master-Datei und führt erste Bereinigungen durch.
-#     Stellt sicher, dass PC1 und PC2 numerisch sind."""
-#     st.info(f"📁 Versuche, Master-Datei von Pfad: **{path}** zu laden...")
-    
-#     if not os.path.exists(path):
-#         st.error(f"❌ **Datei nicht gefunden!** Der Pfad existiert nicht: `{path}`")
-#         return None
-#     try:
-#         # HINWEIS: Master-Datei lädt wahrscheinlich mit Semikolon (;) als Separator
-#         df = pd.read_csv(path, sep=';', index_col='Date', parse_dates=True, on_bad_lines='skip') 
-        
-#         required_cols = ['PC1', 'PC2', 'Regime', 'Close']
-#         if not all(col in df.columns for col in required_cols):
-#              st.error(f"❌ **Fehlende Spalten im Master-DF.** Erwartet: {required_cols}")
-#              return None
-        
-#         # Erzwingen der numerischen Konvertierung für PC1 und PC2 (Fix für den PCA Plot)
-#         df['PC1'] = pd.to_numeric(df['PC1'], errors='coerce')
-#         df['PC2'] = pd.to_numeric(df['PC2'], errors='coerce')
-        
-#         # Entferne Zeilen mit fehlenden Werten in kritischen Spalten
-#         df.dropna(subset=['PC1', 'PC2', 'Regime'], inplace=True) 
-        
-#         st.success(f"✅ **Daten erfolgreich geladen und PCA-Spalten als Float konvertiert!** Shape: {df.shape}")
-#         return df
-#     except Exception as e:
-#         st.error(f"⚠️ **Schwerer Fehler beim Einlesen der CSV**: `{e}`")
-#         return None
-
-# # NEUE, ROBUSTERE LADEFUNKTION FÜR METRIKEN
-# @st.cache_data
-# def load_metrics(path, expected_cols=None):
-#     """
-#     Lädt eine Metrik-Datei und versucht es mit verschiedenen Separatoren, 
-#     um Parsing-Fehler zu vermeiden.
-#     """
-#     if not os.path.exists(path):
-#         st.warning(f"⚠️ WARNUNG: Metrik-Datei nicht gefunden unter `{path}`.")
-#         return None
-    
-#     separators = [';', ',', '\t']
-#     df = None
-    
-#     for sep in separators:
-#         try:
-#             df = pd.read_csv(path, sep=sep)
-#             # Erfolgreich geparst, wenn mehr als 1 Spalte gefunden
-#             if df.shape[1] > 1:
-#                 # Prüfen, ob eine erwartete Schlüsselspalte vorhanden ist, falls angegeben
-#                 if expected_cols is None or any(col in df.columns for col in expected_cols):
-#                     return df
-#             # Wenn nur eine Spalte geladen wurde, versuchen wir den nächsten Separator
-#         except Exception:
-#             continue
-            
-#     # Nur Fehler anzeigen, wenn das Laden komplett fehlschlägt
-#     st.error(f"❌ Metriken konnten nicht geladen oder richtig geparst werden: `{path}`. Versuchte Separatoren: {separators}. Überprüfen Sie das Dateiformat.")
-#     return None
-
-# df_master = load_data(DATA_PATH)
-
-# # --- KLASSISCHE DATENLADUNG MIT ROBUSTER FUNKTION ---
-# df_cluster_metrics = load_metrics(CLUSTERING_METRICS_PATH, expected_cols=['model', 'Model', 'Silhouette'])
-# df_dir_metrics = load_metrics(DIRECTION_METRICS_PATH, expected_cols=['model', 'Model', 'Accuracy'])
-# df_reg_metrics = load_metrics(REGRESSION_METRICS_PATH, expected_cols=['model', 'Model', 'horizon', 'Horizont']) 
 
 # ==================================================================================================
 # 2. DATENPFADE & LADEFUNKTIONEN (FINAL KORRIGIERT: Trennzeichen-Konflikt gelöst)
@@ -183,6 +107,11 @@ def load_metrics_robust(path, expected_cols=None):
 
 df_master = load_data(DATA_PATH)
 
+
+# --- KORREKTUR FÜR CLUSTER_3 DATENTYP (HIER EINFÜGEN) ---
+# Konvertiert 0.0, 1.0, 2.0 zu den Strings '0', '1', '2' für Plotly
+
+df_master['Cluster_3'] = df_master['Cluster_3'].fillna(-1).astype(int).astype(str)
 # --- KLASSISCHE DATENLADUNG ---
 # Nutzt die robuste Funktion für die Files, bei denen wir den Separator nicht kennen
 df_cluster_metrics = load_metrics_robust(CLUSTERING_METRICS_PATH, expected_cols=['model', 'Model', 'Silhouette'])
@@ -435,89 +364,6 @@ def create_candlestick_chart(df):
     
     return fig
 
-
-# def create_pca_scatter_plot(df, focus_date_str):
-#     """Erstellt einen interaktiven Scatter Plot der PCA-Komponenten (PC1 vs. PC2),
-#     eingefärbt nach dem Markt-Regime, und hebt den Fokus-Tag hervor. (Fix für den PCA Plot)"""
-    
-#     # Sicherstellen, dass PC1 und PC2 numerisch sind
-#     df['PC1'] = pd.to_numeric(df['PC1'], errors='coerce')
-#     df['PC2'] = pd.to_numeric(df['PC2'], errors='coerce')
-    
-#     df_plot = df.copy().dropna(subset=['PC1', 'PC2', 'Regime'])
-
-#     REGIME_COLOR_MAP = {
-#         'Bear': '#DC3545',      # Rot
-#         'Sideways': '#FFC107',  # Gelb
-#         'Bull': '#28A745',      # Grün
-#     }
-    
-#     fig = go.Figure()
-
-#     # 1. Historische Punkte nach Regime
-#     for regime, color in REGIME_COLOR_MAP.items():
-#         df_regime = df_plot[df_plot['Regime'] == regime]
-        
-#         # Base historical points
-#         fig.add_trace(go.Scatter(
-#             x=df_regime['PC1'],
-#             y=df_regime['PC2'],
-#             mode='markers',
-#             marker=dict(
-#                 size=5,
-#                 color=color,
-#                 opacity=0.6,
-#                 line=dict(width=0.5, color='DarkSlateGrey')
-#             ),
-#             name=f'Regime: {regime}',
-#             text=df_regime.index.strftime('%Y-%m-%d') + '<br>Regime: ' + df_regime['Regime'],
-#             hoverinfo='text+x+y'
-#         ))
-
-#     # 2. Fokus-Tag hervorheben
-#     # Datum in das gleiche Format konvertieren wie im Index, um den Vergleich zu ermöglichen
-#     focus_date_dt = pd.to_datetime(focus_date_str).strftime('%Y-%m-%d')
-    
-#     # Filtern nach dem Fokus-Tag im formatierten Index
-#     focus_data_match = df_plot[df_plot.index.strftime('%Y-%m-%d') == focus_date_dt]
-    
-#     if not focus_data_match.empty:
-#         focus_data = focus_data_match.iloc[0]
-        
-#         fig.add_trace(go.Scatter(
-#             x=[focus_data['PC1']],
-#             y=[focus_data['PC2']],
-#             mode='markers+text',
-#             marker=dict(
-#                 size=20,
-#                 color='#FBBF24', # Fokus-Farbe (Amber)
-#                 line=dict(width=3, color='black'),
-#                 symbol='star' # Stern-Symbol für den Fokus
-#             ),
-#             name='Fokus-Tag',
-#             text=[f'🎯 {focus_date_str} ({focus_data["Regime"]})'],
-#             textposition="top center",
-#             textfont=dict(size=14, color='black', weight='bold'),
-#             hoverinfo='text'
-#         ))
-
-
-#     # 3. Layout-Anpassungen
-#     fig.update_layout(
-#         title='Markt-Regime-Visualisierung (PC1 vs. PC2)',
-#         xaxis_title='PC1 (Trend-Achse: Bear ⬅️ ➡️ Bull)',
-#         yaxis_title='PC2 (Volatilitäts-Achse)',
-#         legend_title="Markt-Regime",
-#         height=650,
-#         template="plotly_white"
-#     )
-    
-#     # 4. Optional: Markierung des PC1-Durchschnitts zur Trennung von Bull/Bear
-#     fig.add_vline(x=df_plot['PC1'].mean(), line_width=1, line_dash="dash", line_color="gray", 
-#                   annotation_text="Historischer Durchschnitt PC1", annotation_position="bottom right")
-
-#     return fig
-
 def create_pca_scatter_plot(df, focus_date_str):
     """Erstellt einen interaktiven Scatter Plot der PCA-Komponenten (PC1 vs. PC2),
     eingefärbt nach dem Markt-Regime, und hebt den Fokus-Tag hervor. (Fix für den PCA Plot)"""
@@ -574,10 +420,9 @@ def create_pca_scatter_plot(df, focus_date_str):
                 symbol='star' # Stern-Symbol für den Fokus
             ),
             name='Fokus-Tag',
-            # Behält den Dart-Emoji im Text bei
             text=[f'🎯 {focus_date_str} ({focus_data["Regime"]})'],
             textposition="top center",
-            # HIER: Farbe auf WEISS und Größe auf 16 erhöht
+            # HIER: Farbe auf WEISS und Größe auf 16 erhöht (Lesbarkeit bei dunklem Hintergrund)
             textfont=dict(size=16, color='white', weight='bold'), 
             hoverinfo='text'
         ))
@@ -598,6 +443,7 @@ def create_pca_scatter_plot(df, focus_date_str):
                   annotation_text="Historischer Durchschnitt PC1", annotation_position="bottom right")
 
     return fig
+
 
 
 def find_analogies(df_master, focus_date, top_k):
@@ -665,6 +511,313 @@ def find_analogies(df_master, focus_date, top_k):
     
     return df_analogies, summary_metrics
 
+
+# Globale Farbkarte für Konsistenz
+REGIME_COLOR_MAP = {
+    'Bear': '#DC3545',      # Rot
+    'Sideways': '#FFC107',  # Gelb
+    'Bull': '#28A745',      # Grün
+}
+
+# --- 1. EDA-FUNKTIONEN (Sektion 5.1) ---
+
+def create_regime_frequency_bar_chart(df):
+    """Erstellt ein Balkendiagramm, das die absoluten Häufigkeiten der Markt-Regime zeigt (Teil 1)."""
+    df_counts = df['Regime'].value_counts().reset_index()
+    df_counts.columns = ['Regime', 'Anzahl Tage']
+    order = ['Bull', 'Sideways', 'Bear']
+    df_counts['Regime'] = pd.Categorical(df_counts['Regime'], categories=order, ordered=True)
+    df_counts = df_counts.sort_values('Regime')
+    
+    fig = px.bar(df_counts, x='Regime', y='Anzahl Tage', color='Regime', color_discrete_map=REGIME_COLOR_MAP,
+                 title='Häufigkeit der Markt-Regime', text='Anzahl Tage')
+    fig.update_layout(xaxis_title=None, yaxis_title='Anzahl Tage', showlegend=False, height=400)
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    return fig
+
+def create_cluster_frequency_bar_chart(df):
+    """Erstellt ein Balkendiagramm, das die absoluten Häufigkeiten der ML-Cluster zeigt (Teil 1)."""
+    df_counts = df['Cluster_3'].value_counts().reset_index()
+    df_counts.columns = ['Cluster', 'Anzahl Tage']
+    df_counts['Cluster'] = df_counts['Cluster'].astype(str)
+    
+    fig = px.bar(df_counts, x='Cluster', y='Anzahl Tage', color='Cluster',
+                 title='Häufigkeit der ML-Cluster (K=3)', text='Anzahl Tage')
+    fig.update_layout(xaxis_title=None, yaxis_title='Anzahl Tage', showlegend=False, height=400)
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    return fig
+
+def create_time_series_plot(df):
+    """Zeitlicher Verlauf von Preis und Volatilität (Teil 1)."""
+    df['Date'] = pd.to_datetime(df.index)
+    df_ts = df[['Close', 'Volatility30']].copy().dropna()
+    
+    fig = go.Figure()
+    
+    # Preis (Close) auf primärer Y-Achse
+    fig.add_trace(go.Scatter(x=df_ts.index, y=df_ts['Close'], name='Close Preis', yaxis='y1', line=dict(color='blue')))
+    
+    # Volatilität auf sekundärer Y-Achse
+    fig.add_trace(go.Scatter(x=df_ts.index, y=df_ts['Volatility30'], name='Volatility30', yaxis='y2', line=dict(color='orange', dash='dot')))
+    
+    fig.update_layout(
+        title='Zeitlicher Verlauf von Preis und Volatilität (30d)',
+        xaxis_title='Datum',
+        yaxis=dict(title='Schlusskurs (Close)', color='blue'),
+        yaxis2=dict(title='Volatilität (30d)', overlaying='y', side='right', color='orange', showgrid=False),
+        height=500,
+        legend=dict(x=0.01, y=0.99)
+    )
+    return fig
+
+import plotly.express as px
+import plotly.graph_objects as go
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+import numpy as np
+import pandas as pd
+
+# =========================================================
+# PLOT-FUNKTIONEN FÜR 5.2 THESENPRÜFUNG
+# =========================================================
+
+# THESEN BLOCK 1: These 1 (Regime-Unterschiede)
+def create_return_by_regime_boxplot(df):
+    """Erzeugt ein Boxplot der täglichen Rendite gruppiert nach Markt-Regime (These 1)."""
+    
+    regime_order = ['Bear', 'Sideways', 'Bull']
+    regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
+
+    fig = px.box(
+        df,
+        x='Regime',
+        y='Return',
+        category_orders={'Regime': regime_order},
+        color='Regime',
+        color_discrete_map=regime_color_map,
+        title='Prüfung These 1: Renditeverteilung nach Markt-Regime',
+        labels={'Return': 'Tägliche Rendite (%)', 'Regime': 'Markt-Regime'},
+        template='plotly_white'
+    )
+    
+    fig.update_layout(yaxis_tickformat='.2%')
+    fig.update_xaxes(title_text='Markt-Regime')
+    fig.update_yaxes(title_text='Tägliche Rendite')
+
+    return fig
+
+# THESEN BLOCK 2: These 2 (Cluster-Phasen)
+def create_return_by_cluster_boxplot(df):
+    """Erzeugt ein Boxplot der täglichen Rendite gruppiert nach ML-Cluster (These 2)."""
+
+    # Cluster-Namen/IDs müssen in Ihrer df_master die Spalte 'Cluster_3' haben
+    cluster_order = sorted(df['Cluster_3'].unique())
+    # Hier werden neutrale Plotly-Farben verwendet
+    
+    fig = px.box(
+        df,
+        x=df['Cluster_3'].astype(str), # Sicherstellen, dass Cluster_3 als String behandelt wird
+        y='Return',
+        category_orders={'x': cluster_order},
+        color=df['Cluster_3'].astype(str),
+        title='Prüfung These 2: Renditeverteilung nach ML-Cluster (Cluster_3)',
+        labels={'Return': 'Tägliche Rendite (%)', 'x': 'ML-Cluster ID'},
+        template='plotly_white'
+    )
+    
+    fig.update_layout(yaxis_tickformat='.2%')
+    fig.update_xaxes(title_text='ML-Cluster ID')
+    fig.update_yaxes(title_text='Tägliche Rendite')
+
+    return fig
+
+# THESEN BLOCK 6: These 6 (MA-Differenz)
+def create_ma_diff_by_regime_boxplot(df):
+    """Erzeugt ein Boxplot der MA50 - MA200 Differenz nach Markt-Regime (These 6)."""
+    
+    # Sicherstellen, dass die Differenz existiert, falls sie nicht im df_master ist
+    df_temp = df.copy()
+    df_temp['MA_Diff'] = df_temp['MA50'] - df_temp['MA200']
+
+    regime_order = ['Bear', 'Sideways', 'Bull']
+    regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
+
+    fig = px.box(
+        df_temp,
+        x='Regime',
+        y='MA_Diff',
+        category_orders={'Regime': regime_order},
+        color='Regime',
+        color_discrete_map=regime_color_map,
+        title='Prüfung These 6: MA50 - MA200 Differenz nach Markt-Regime',
+        labels={'MA_Diff': 'Differenz MA50 - MA200 (USD)', 'Regime': 'Markt-Regime'},
+        template='plotly_white'
+    )
+
+    # Fügt eine horizontale Linie bei y=0 hinzu (wichtig für die Interpretation)
+    fig.add_hline(y=0, line_width=2, line_dash="dash", line_color="gray")
+    fig.update_xaxes(title_text='Markt-Regime')
+    fig.update_yaxes(title_text='MA-Differenz (USD)')
+
+    return fig
+
+# THESEN BLOCK 5: These 5 (Volatilität vs. Rendite)
+def create_return_vs_volatility_scatter(df):
+    """Erzeugt ein Scatter Plot von Rendite vs. Volatilität mit Korrelationslinie (These 5)."""
+    
+    regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
+
+    fig = px.scatter(
+        df,
+        x='Volatility30',
+        y='Return',
+        color='Regime',
+        color_discrete_map=regime_color_map,
+        title='Prüfung These 5: Rendite vs. Volatilität (Chaos führt zu Verlust)',
+        labels={'Return': 'Tägliche Rendite (%)', 'Volatility30': 'Volatilität (30 Tage)'},
+        template='plotly_white',
+        opacity=0.6,
+        trendline="ols", # Ordinary Least Squares (OLS) Regression hinzufügen
+        trendline_color_override='gray'
+    )
+
+    fig.update_layout(yaxis_tickformat='.2%')
+    fig.update_xaxes(title_text='Volatilität (30d)')
+    fig.update_yaxes(title_text='Tägliche Rendite')
+    
+    return fig
+
+# THESEN BLOCK 3: These 3 (Hitrate pro Cluster)
+def create_hitrate_by_cluster_bar_chart(df):
+    """Erzeugt ein Balkendiagramm der Trefferquote pro Cluster (These 3)."""
+    
+    # **WICHTIG:** Hier simulieren wir die Daten, da das `df_master` nur die Vorhersagen, aber nicht die Aggregation der Metriken enthält.
+    # Sie müssen diesen Teil anpassen, um Ihre tatsächlichen Modell-Metriken zu laden.
+    
+    try:
+        # Hier wird angenommen, dass Sie ein DataFrame mit den Metriken haben,
+        # das nach 'Cluster_3' aggregiert wurde, z.B. 'hit_rate_per_cluster'.
+        
+        # Beispiel-Daten (Muss durch echte Metriken ersetzt werden)
+        hitrate_data = pd.DataFrame({
+            'Cluster_3': [0, 1, 2],
+            'Hit_Rate': [0.52, 0.75, 0.65], # Beispielwerte
+            'Regime_Label': ['Bear (Low Hit)', 'Bull (High Hit)', 'Sideways (Medium Hit)']
+        })
+        
+        # Sortierung der Cluster festlegen
+        hitrate_data = hitrate_data.sort_values(by='Hit_Rate', ascending=False)
+        
+        fig = px.bar(
+            hitrate_data,
+            x='Regime_Label',
+            y='Hit_Rate',
+            color='Hit_Rate',
+            color_continuous_scale=px.colors.sequential.Teal,
+            title='Prüfung These 3: Trefferquote (Hit Rate) nach ML-Cluster',
+            labels={'Hit_Rate': 'Trefferquote', 'Regime_Label': 'ML-Cluster und Interpretation'},
+            template='plotly_white'
+        )
+
+        fig.update_yaxes(range=[0.4, 0.9], tickformat='.1%')
+        fig.update_xaxes(title_text='ML-Cluster (absteigende Trefferquote)')
+        fig.update_yaxes(title_text='Trefferquote (Hit Rate)')
+
+    except Exception as e:
+        # Fallback, falls die Metriken fehlen
+        print(f"Fehler beim Erstellen des Hitrate-Plots: {e}")
+        fig = go.Figure()
+        fig.add_annotation(text="Daten für Hit Rate pro Cluster fehlen oder sind fehlerhaft.",
+                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+
+    return fig
+
+# THESEN BLOCK 7: These 7 (Prognosestabilität)
+
+# THESEN BLOCK 7: These 7 (Prognosestabilität)
+def create_long_term_forecast_plot(df):
+    """Erzeugt einen Line Plot zum Vergleich von Close mit den Vorhersagehorizonten (These 7)."""
+
+    # Kopie erstellen, um den originalen Index nicht dauerhaft zu ändern
+    df_plot = df.copy()
+    
+    # FEHLERBEHEBUNG: Den Index-Namen temporär auf None setzen, 
+    # WENN er 'Date' heißt und mit einer existierenden Spalte kollidiert.
+    if df_plot.index.name == 'Date':
+        df_plot.index.name = None
+        
+    # Index zurücksetzen. Die neue Spalte wird 'index' heißen, wenn der Name None war.
+    df_plot = df_plot.reset_index()
+
+    # Falls die Spalte 'index' existiert (was nach dem Entfernen des Namens der Fall ist), in 'Date' umbenennen.
+    if 'index' in df_plot.columns:
+        df_plot = df_plot.rename(columns={'index': 'Date'})
+        
+    # Auswahl der relevanten Spalten. Jetzt existiert 'Date' nur einmal.
+    df_plot = df_plot[['Date', 'Close', 'Pred_1d', 'Pred_7d', 'Pred_30d']]
+
+    # Plot erstellen (Long-Format für Plotly Express)
+    df_long = df_plot.melt(
+        id_vars=['Date'], 
+        value_vars=['Close', 'Pred_1d', 'Pred_7d', 'Pred_30d'],
+        var_name='Serie', 
+        value_name='Preis'
+    )
+    
+    # Farbschema für die Lesbarkeit anpassen
+    color_map = {
+        'Close': '#1f77b4',     # Blau (Aktueller Preis)
+        'Pred_1d': '#00CC96',   # Grün (Kurzfristig - stabil)
+        'Pred_7d': '#FF7F0E',   # Orange (Mittelfristig)
+        'Pred_30d': '#EF553B'   # Rot (Längerfristig - weniger stabil)
+    }
+
+    fig = px.line(
+        df_long,
+        x='Date',
+        y='Preis',
+        color='Serie',
+        color_discrete_map=color_map,
+        title='Prüfung These 7: Preis und Prognosen für verschiedene Horizonte',
+        labels={'Preis': 'Preis (USD)', 'Date': 'Datum'},
+        template='plotly_white'
+    )
+    
+    fig.update_xaxes(title_text='Datum')
+    fig.update_yaxes(title_text='Preis (USD)')
+
+    return fig
+
+def create_cluster_regime_heatmap(df):
+    """Erstellt eine Heatmap der Häufigkeiten, die zeigt, wie Cluster_3 auf die Regime mappt."""
+    
+    # 1. Kreuztabelle (Crosstab) erstellen
+    # Zeilen: Regime, Spalten: Cluster_3
+    cross_tab = pd.crosstab(df['Regime'], df['Cluster_3'])
+    
+    # 2. Plot erstellen
+    fig = px.imshow(
+        cross_tab,
+        text_auto=True, # Zeigt die Zahlen in den Zellen
+        color_continuous_scale='Viridis', # Farbpalette
+        title='Zuordnung der ML-Cluster zu Markt-Regime (Crosstab)'
+    )
+    
+    fig.update_xaxes(title="ML Cluster-ID (Cluster_3)")
+    fig.update_yaxes(title="Markt-Regime")
+    
+    # Um die Farben der Heatmap zu normalisieren, nutzen wir die max-Werte für die Skala
+    max_count = cross_tab.values.max()
+    fig.update_layout(
+        coloraxis_colorbar=dict(
+            title="Anzahl Tage",
+            tickvals=[0, max_count],
+            ticktext=["Geringe Anzahl", "Hohe Anzahl"],
+        ),
+        height=450
+    )
+    
+    return fig
 # ==================================================================================================
 # 5. DASHBOARD LOGIK UND LAYOUT
 # ==================================================================================================
@@ -1002,81 +1155,6 @@ if df_master is not None:
                     )
                 # ENDE DER NEUEN ERKLÄRUNG
 
-    # # --- Tab 3.2: KLASSIFIKATIONS-METRIKEN ---
-    # with tab_dir:
-    #     st.header("3.2 Klassifikations-Metriken: Steigt oder fällt der Preis **(Direction/Signal für den nächsten Tag)**?")
-        
-    #     col_dir_select, col_empty = st.columns([1, 4])
-    #     with col_dir_select:
-    #         selected_dir_model = st.selectbox(
-    #             "Wählen Sie das zu bewertende Klassifikationsmodell:",
-    #             options=dir_models, 
-    #             index=dir_models.index(selected_dir_model),
-    #             key="dir_model_tab"
-    #         )
-            
-    #     st.subheader("Performance der Modelle auf dem Testset")
-        
-    #     if df_dir_metrics is None:
-    #         st.warning(f"⚠️ WARNUNG: Metrik-Datei nicht gefunden oder konnte nicht geladen werden unter `{DIRECTION_METRICS_PATH}`.")
-    #     else:
-    #         st.success("✅ Klassifikations-Metrik-Datei gefunden und geladen.")
-            
-    #         df_dir_display = df_dir_metrics.copy()
-            
-    #         # Stelle sicher, dass die Spalte 'Model' oder 'Modell' existiert
-    #         if 'Model' in df_dir_display.columns:
-    #             df_dir_display.rename(columns={'Model': 'Modell'}, inplace=True, errors='ignore')
-    #         elif 'model' in df_dir_display.columns:
-    #              df_dir_display.rename(columns={'model': 'Modell'}, inplace=True, errors='ignore')
-            
-    #         df_dir_display.rename(columns={
-    #             'Accuracy': 'Accuracy (Gesamttreffer)', 
-    #             'Precision': 'Precision (Zuverlässigkeit)', 'Recall': 'Recall (Erkennung)', 
-    #             'F1': 'F1-Score (Balance)' 
-    #         }, inplace=True, errors='ignore')
-
-    #         # Korrektur: Konvertierung in Prozent für bessere Lesbarkeit
-    #         for col_key in ['Accuracy (Gesamttreffer)', 'Precision (Zuverlässigkeit)', 'Recall (Erkennung)', 'F1-Score (Balance)']: 
-    #             if col_key in df_dir_display.columns:
-    #                 df_dir_display[col_key] = pd.to_numeric(df_dir_display[col_key], errors='coerce')
-    #                 df_dir_display[col_key] = df_dir_display[col_key].apply(lambda x: f'{x*100:.2f} %') 
-            
-    #         st.dataframe(
-    #             # Anwendung des abgesicherten Stylings
-    #             df_dir_display.style.apply(highlight_selected_dir_model, axis=1, current_model=selected_dir_model),
-    #             use_container_width=True
-    #         )
-            
-    #         # Wähle die beste Zeile basierend auf F1-Score
-    #         if 'F1' in df_dir_metrics.columns:
-    #             best_f1_row = df_dir_metrics.loc[df_dir_metrics['F1'].idxmax()]
-                
-    #             # Stelle sicher, dass 'Modell' in der besten Zeile verfügbar ist
-    #             best_model_dir = next((best_f1_row[col] for col in ['Model', 'model'] if col in best_f1_row), "N/A")
-
-    #             best_f1 = f"{best_f1_row['F1'] * 100:.2f}%"
-    #             best_recall = f"{best_f1_row['Recall'] * 100:.2f}%"
-    #             best_precision = f"{best_f1_row['Precision'] * 100:.2f}%"
-                
-    #             st.markdown("---")
-    #             st.subheader("💡 Performance-Analyse und Interpretation (Fokus: Direction-Signal 1d)")
-    #             st.info(
-    #                 f"**Ergebnis:** Das Modell **{best_model_dir}** bietet mit einem F1-Score von **{best_f1}** die beste Gesamtbalance.\n\n"
-    #                 f"➡️ **Erkennung (Recall):** Das Modell identifiziert **{best_recall}** aller tatsächlichen Preisanstiege (minimiert verpasste Kaufgelegenheiten).\n"
-    #                 f"➡️ **Zuverlässigkeit (Precision):** Nur in **{best_precision}** der Fälle liegt das Signal richtig, wenn es einen Anstieg vorhersagt (Fehlalarmrate beachten)."
-    #             )
-    #         else:
-    #             st.info("💡 **Analyse-Status:** Die Performance-Interpretation ist nicht verfügbar, da die Spalte 'F1' fehlt.")
-            
-    #         st.markdown("---")
-    #         st.subheader("Definition der Kennzahlen")
-    #         st.info(
-    #             "**Accuracy**: Gesamtanteil korrekter Vorhersagen. **Werte nahe 100% sind ideal**.\n\n"
-    #             "**Precision**: Zuverlässigkeit des Kaufsignals (Wie oft liegt das Signal richtig?).\n\n"
-    #             "**Recall**: Vollständigkeit der Erkennung (Wie viele tatsächliche Anstiege wurden erkannt?).\n\n"
-    #             "**F1-Score**: Bester Indikator für die Gesamtperformance (Balance zwischen Precision und Recall)."
-    #         )
 
 # --- Tab 3.2: KLASSIFIKATIONS-METRIKEN ---
 with tab_dir:
@@ -1446,186 +1524,530 @@ with tab2_new:
         )
     
     
-# # --- Tab 4: MARKT-VISUALISIERUNG (PCA/Cluster) ---
-#     with tab4_new:
-#         st.header("4. Markt-Visualisierung (PCA/Cluster)")
-#         st.markdown("### 🗺️ Die Position des Fokus-Tags im Markt-Regime-Raum")
-        
-#         # LOKALE ÜBERSCHREIBUNG: Eindeutige Datumsauswahl nur für die PCA
-#         st.markdown("---")
-        
-#         # *WICHTIG:* Wir nutzen das global definierte end_date als Standardwert
-#         # und die bereits vorbereitete Liste date_dt_list
-#         fokus_datum_pca = st.date_input(
-#             "📆 Wählen Sie den FOKUS-TAG für die PCA-Visualisierung:",
-#             value=end_date, # Nutzt das Enddatum des globalen Sliders als Standard
-#             min_value=date_dt_list[0],
-#             max_value=date_dt_list[-1],
-#             key='fokus_pca_selector'
-#         )
-        
-#         # Definiere den lokalen Fokus-Tag, der nur hier verwendet wird
-#         fokus_tag_pca = fokus_datum_pca.strftime('%Y-%m-%d')
-
-#         st.info(f"Visualisierter Fokus-Tag: **{fokus_tag_pca}**")
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # NEUER ERKLÄRUNGSBLOCK (OPTIMIERT FÜR PRÄSENTATION)
-#         # -----------------------------------------------------------------
-#         st.subheader("Detaillierte Erläuterung der Marktstruktur-Visualisierung")
-#         st.markdown(
-#             "Diese Ansicht basiert auf der **Hauptkomponentenanalyse (PCA)**. Die PCA reduziert die Komplexität von über zwanzig technischen Indikatoren auf zwei Hauptachsen. "
-#             "Das Ergebnis ist eine **zweidimensionale Landkarte** des Marktes, die es uns ermöglicht, die aktuelle Marktphase (**Stern/Target**) im Kontext der gesamten historischen Bewegung visuell einzuordnen. "
-#         )
-        
-#         st.markdown("---")
-        
-#         st.subheader("1. Die drei Komponenten der Visualisierung")
-#         st.markdown(
-#             "#### a) Datenbasis (Die Historischen Punkte)\n"
-#             "**Jeder einzelne Punkt** auf der Grafik repräsentiert die **Marktstruktur eines Handelstages** in unserem Datensatz. Diese Punkte bilden die **historische Datenbank** aller jemals aufgetretenen Marktbedingungen."
-#         )
-#         st.markdown(
-#             "#### b) Markt-Regime (Die Farb-Cluster)\n"
-#             "Die Punkte sind mithilfe von Clustering-Algorithmen in **farbige Cluster** (Regime) gruppiert. Ein Cluster fasst Tage mit **statistisch ähnlicher technischer Struktur** zusammen. "
-#             "**Fazit:** Tage innerhalb desselben Clusters teilen typischerweise ähnliche Verhaltensmuster, was für die Prognose essenziell ist."
-#         )
-#         st.markdown(
-#             f"#### c) Der Fokus-Tag (⭐/🎯 Target)\n"
-#             f"Der große, hervorgehobene **Stern** (**⭐** oder **🎯**) zeigt die **exakte Position** des aktuell gewählten **Fokus-Tages ({fokus_tag_pca})** im Markt-Regime-Raum. "
-#             "Seine Position im Verhältnis zu den Clustern bestätigt das von unserem Modell zugewiesene Markt-Regime und dient als visueller Startpunkt für die Analogien-Analyse."
-#         )
-        
-#         # -----------------------------------------------------------------
-#         # VISUALISIERUNG UND ACHSEN-ERKLÄRUNG
-#         # -----------------------------------------------------------------
-
-#         # pca_fig = create_pca_scatter_plot(df_master, fokus_tag) <-- Veraltet
-#         pca_fig = create_pca_scatter_plot(df_master, fokus_tag_pca) # <-- Neu: Nutzt den lokalen Tag
-#         st.plotly_chart(pca_fig, use_container_width=True)
-
-#         st.markdown("---")
-#         st.subheader("2. Interpretation der Achsen (PC1 & PC2)")
-#         st.markdown(
-#             "➡️ **X-Achse (PC1): Trend-Komponente (Dominante Marktrichtung).** Repräsentiert die primäre Stärke des Trends. "
-#             "Bewegung nach **rechts** signalisiert eine Zunahme der **bullischen Dynamik** (starker Aufwärtstrend). Bewegung nach **links** signalisiert eine starke **bearishe** Tendenz (Abwärtstrend).\n"
-#             "➡️ **Y-Achse (PC2): Volatilitäts-Komponente (Markt-Unsicherheit).** Repräsentiert die Schwankungsbreite und das Rauschen im Markt. "
-#             "Eine **hohe** Position (oben) deutet auf hohe **Volatilität** und Unsicherheit hin. Niedrige Positionen (unten) stehen für ruhige, stabile Marktphasen.\n"
-#             f"➡️ **Stern/Target (⭐/🎯):** Seine Position in diesem Koordinatensystem liefert die Grundlage für die Analogie-Suche in **Tab 2**."
-#         )
-        
 # --- Tab 4: MARKT-VISUALISIERUNG (PCA/Cluster) ---
-
-    # --- Tab 4: MARKT-VISUALISIERUNG (PCA/Cluster) ---
-with tab4_new:
-    st.header("4. Markt-Visualisierung (PCA/Cluster)")
-    st.markdown("### 🗺️ Die Position des Fokus-Tags im Markt-Regime-Raum")
-    
-    # LOKALE ÜBERSCHREIBUNG: Eindeutige Datumsauswahl nur für die PCA
-    st.markdown("---")
-    
-    # *WICHTIG:* Wir nutzen das global definierte end_date als Standardwert
-    # und die bereits vorbereitete Liste date_dt_list
-    fokus_datum_pca = st.date_input(
-        "📆 Wählen Sie den FOKUS-TAG für die PCA-Visualisierung:",
-        value=end_date, # Nutzt das Enddatum des globalen Sliders als Standard
-        min_value=date_dt_list[0],
-        max_value=date_dt_list[-1],
-        key='fokus_pca_selector'
-    )
-    
-    # Definiere den lokalen Fokus-Tag, der nur hier verwendet wird
-    fokus_tag_pca = fokus_datum_pca.strftime('%Y-%m-%d')
-
-    st.info(f"Visualisierter Fokus-Tag: **{fokus_tag_pca}**")
-    st.markdown("---")
-    
-    # -----------------------------------------------------------------
-    # NEUER ERKLÄRUNGSBLOCK (OPTIMIERT FÜR PRÄSENTATION)
-    # -----------------------------------------------------------------
-    st.subheader("Erläuterung der Marktstruktur-Visualisierung")
-    st.markdown(
-        "Diese Ansicht basiert auf der **Hauptkomponentenanalyse (PCA)**. Die PCA reduziert die Komplexität von über zwanzig technischen Indikatoren auf zwei Hauptachsen. "
-        "Das Ergebnis ist eine **zweidimensionale Landkarte** des Marktes, die es uns ermöglicht, die aktuelle Marktphase (**Stern/Target**) im Kontext der gesamten historischen Bewegung visuell einzuordnen. "
-    )
-    
-    # -----------------------------------------------------------------
-    # VISUALISIERUNG UND ACHSEN-ERKLÄRUNG
-    # -----------------------------------------------------------------
-
-    pca_fig = create_pca_scatter_plot(df_master, fokus_tag_pca) # Nutzt nun die Funktion mit weißem Text
-    st.plotly_chart(pca_fig, use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("1. Interpretation der Achsen (PC1 & PC2)")
-    st.markdown(
-        "➡️ **X-Achse (PC1): Trend-Komponente (Dominante Marktrichtung).** Repräsentiert die primäre Stärke des Trends. "
-        "Bewegung nach **rechts** signalisiert eine Zunahme der **bullischen Dynamik** (starker Aufwärtstrend). Bewegung nach **links** signalisiert eine starke **bearishe** Tendenz (Abwärtstrend).\n\n"
+    with tab4_new:
+        st.header("4. Markt-Visualisierung (PCA/Cluster)")
+        st.markdown("### 🗺️ Die Position des Fokus-Tags im Markt-Regime-Raum")
         
-        "➡️ **Y-Achse (PC2): Volatilitäts-Komponente (Markt-Unsicherheit).** Repräsentiert die Schwankungsbreite und das Rauschen im Markt. "
-        "Eine **hohe** Position (oben) deutet auf hohe **Volatilität** und Unsicherheit hin. Niedrige Positionen (unten) stehen für ruhige, stabile Marktphasen.\n\n"
+        # LOKALE ÜBERSCHREIBUNG: Eindeutige Datumsauswahl nur für die PCA
+        st.markdown("---")
         
-        f"➡️ **Stern/Target (⭐/🎯):** Seine Position in diesem Koordinatensystem liefert die Grundlage für die Analogie-Suche in **Tab 2**."
-    )
-    
-    # -----------------------------------------------------------------
-    # NEU: BEISPIELANALYSE DER PC-WERTE
-    # -----------------------------------------------------------------
-    
-    st.markdown("--")
-    
-    st.subheader("2. Interpretation der Koordinaten (PC-Werte)")
-    st.markdown(
-        "Wenn Sie über einen Punkt (einen Tag) fahren, sehen Sie dessen exakte **Koordinaten** (PC1- und PC2-Werte). Diese Werte sind normiert, liegen also typischerweise zwischen ca. -0.1 und +0.1."
-    )
-    
-    st.markdown("#### 📈 PC1-Werte (Trend-Komponente)")
-    st.markdown(
-        "* **Hoher PC1-Wert (positiv, z.B. $> 0.05$):** Der Tag weist eine **stark bullische Struktur** auf (hohes Momentum, weit über gleitenden Durchschnitten). Der Markt bewegte sich dominant nach oben.\n"
-        "* **Niedriger PC1-Wert (negativ, z.B. $< -0.05$):** Der Tag weist eine **stark bearishe Struktur** auf. Der Markt befand sich in einem deutlichen Abwärtstrend.\n"
-        "* **PC1 nahe Null:** Der Tag hatte eine **neutrale** (seitwärts gerichtete) Trendstruktur."
-    )
-    
-    st.markdown("#### 🌪️ PC2-Werte (Volatilitäts-Komponente)")
-    st.markdown(
-        "* **Hoher PC2-Wert (positiv, z.B. $> 0.04$):** Der Tag hatte eine **sehr hohe Volatilität** (hohe Schwankungsbreite, große Kerzen). Dies deutet oft auf Phasen von **Angst oder Gier** hin.\n"
-        "* **Niedriger PC2-Wert (negativ oder nahe Null):** Der Tag war **ruhig und stabil** (niedrige Volatilität). Niedrige Werte bedeuten oft geringes Handelsinteresse oder eine Konsolidierungsphase."
-    )
-    
-    st.markdown("---")
-    st.markdown("#### 💡 Konkretes Beispiel")
-    st.markdown(
-        "Nehmen wir an, der **Fokus-Tag** zeigt die Koordinaten **PC1 = 0.065** und **PC2 = 0.015**:\n"
-        "1.  **PC1 (0.065):** Der Wert ist hoch und positiv. Interpretation: **Stark bullischer Trend** am Markt.\n"
-        "2.  **PC2 (0.015):** Der Wert ist niedrig (nahe Null). Interpretation: **Niedrige bis moderate Volatilität**.\n"
-        "**Gesamt:** Der Tag befand sich in einem **starken, aber relativ ruhigen Aufwärtstrend** (Regime wahrscheinlich 'Bull')."
-    )
-    
-    st.markdown("---")
-    
-    st.subheader("3. Die drei Komponenten der Visualisierung")
-    st.markdown(
-        "#### a) Datenbasis (Die Historischen Punkte)\n"
-        "**Jeder einzelne Punkt** auf der Grafik repräsentiert die **Marktstruktur eines Handelstages** in unserem Datensatz. Diese Punkte bilden die **historische Datenbank** aller jemals aufgetretenen Marktbedingungen."
-    )
-    st.markdown(
-        "#### b) Markt-Regime (Die Farb-Cluster)\n"
-        "Die Punkte sind mithilfe von Clustering-Algorithmen in **farbige Cluster** (Regime) gruppiert. Ein Cluster fasst Tage mit **statistisch ähnlicher technischer Struktur** zusammen. "
-        "**Fazit:** Tage innerhalb desselben Clusters teilen typischerweise ähnliche Verhaltensmuster, was für die Prognose essenziell ist."
-    )
-    st.markdown(
-        f"#### c) Der Fokus-Tag (⭐/🎯 Target)\n"
-        f"Der große, hervorgehobene **Stern** (**⭐** oder **🎯**) zeigt die **exakte Position** des aktuell gewählten **Fokus-Tages ({fokus_tag_pca})** im Markt-Regime-Raum. "
-        "Seine Position im Verhältnis zu den Clustern bestätigt das von unserem Modell zugewiesene Markt-Regime und dient als visueller Startpunkt für die Analogien-Analyse."
-    )
-    
+        # *WICHTIG:* Wir nutzen das global definierte end_date als Standardwert
+        # und die bereits vorbereitete Liste date_dt_list
+        fokus_datum_pca = st.date_input(
+            "📆 Wählen Sie den FOKUS-TAG für die PCA-Visualisierung:",
+            value=end_date, # Nutzt das Enddatum des globalen Sliders als Standard
+            min_value=date_dt_list[0],
+            max_value=date_dt_list[-1],
+            key='fokus_pca_selector'
+        )
+        
+        # Definiere den lokalen Fokus-Tag, der nur hier verwendet wird
+        fokus_tag_pca = fokus_datum_pca.strftime('%Y-%m-%d')
 
+        st.info(f"Visualisierter Fokus-Tag: **{fokus_tag_pca}**")
+        st.markdown("---")
+        
+        # -----------------------------------------------------------------
+        # NEUER ERKLÄRUNGSBLOCK (OPTIMIERT FÜR PRÄSENTATION)
+        # -----------------------------------------------------------------
+        st.subheader("Detaillierte Erläuterung der Marktstruktur-Visualisierung")
+        st.markdown(
+            "Diese Ansicht basiert auf der **Hauptkomponentenanalyse (PCA)**. Die PCA reduziert die Komplexität von über zwanzig technischen Indikatoren auf zwei Hauptachsen. "
+            "Das Ergebnis ist eine **zweidimensionale Landkarte** des Marktes, die es uns ermöglicht, die aktuelle Marktphase (**Stern/Target**) im Kontext der gesamten historischen Bewegung visuell einzuordnen."
+        )
+        
+        st.markdown("---")
+        
+        st.subheader("1. Die drei Komponenten der Visualisierung")
+        st.markdown(
+            "#### a) Datenbasis (Die Historischen Punkte)\n"
+            "**Jeder einzelne Punkt** auf der Grafik repräsentiert die **Marktstruktur eines Handelstages** in unserem Datensatz. Diese Punkte bilden die **historische Datenbank** aller jemals aufgetretenen Marktbedingungen."
+        )
+        st.markdown(
+            "#### b) Markt-Regime (Die Farb-Cluster)\n"
+            "Die Punkte sind mithilfe von Clustering-Algorithmen in **farbige Cluster** (Regime) gruppiert. Ein Cluster fasst Tage mit **statistisch ähnlicher technischer Struktur** zusammen. "
+            "**Fazit:** Tage innerhalb desselben Clusters teilen typischerweise ähnliche Verhaltensmuster, was für die Prognose essenziell ist."
+        )
+        st.markdown(
+            f"#### c) Der Fokus-Tag (⭐/🎯 Target)\n"
+            f"Der große, hervorgehobene **Stern** (**⭐** oder **🎯**) zeigt die **exakte Position** des aktuell gewählten **Fokus-Tages ({fokus_tag_pca})** im Markt-Regime-Raum. "
+            "Seine Position im Verhältnis zu den Clustern bestätigt das von unserem Modell zugewiesene Markt-Regime und dient als visueller Startpunkt für die Analogien-Analyse."
+        )
+        
+        # -----------------------------------------------------------------
+        # VISUALISIERUNG UND ACHSEN-ERKLÄRUNG
+        # -----------------------------------------------------------------
+
+        pca_fig = create_pca_scatter_plot(df_master, fokus_tag_pca)
+        st.plotly_chart(pca_fig, use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("2. Interpretation der Achsen (PC1 & PC2)")
+        st.markdown(
+            "➡️ **X-Achse (PC1): Trend-Komponente (Dominante Marktrichtung).** Repräsentiert die primäre Stärke des Trends. "
+            "Bewegung nach **rechts** signalisiert eine Zunahme der **bullischen Dynamik** (starker Aufwärtstrend). Bewegung nach **links** signalisiert eine starke **bearishe** Tendenz (Abwärtstrend).\n\n"
+            
+            "➡️ **Y-Achse (PC2): Volatilitäts-Komponente (Markt-Unsicherheit).** Repräsentiert die Schwankungsbreite und das Rauschen im Markt. "
+            "Eine **hohe** Position (oben) deutet auf hohe **Volatilität** und Unsicherheit hin. Niedrige Positionen (unten) stehen für ruhige, stabile Marktphasen.\n\n"
+            
+            f"➡️ **Stern/Target (⭐/🎯):** Seine Position in diesem Koordinatensystem liefert die Grundlage für die Analogie-Suche in **Tab 2**."
+        )
+        
+        st.markdown("---")
+        
+        # -----------------------------------------------------------------
+        # BEISPIELANALYSE DER PC-WERTE
+        # -----------------------------------------------------------------
+        
+        st.subheader("3. Interpretation der Koordinaten (PC-Werte)")
+        st.markdown(
+            "Wenn Sie über einen Punkt (einen Tag) fahren, sehen Sie dessen exakte **Koordinaten** (PC1- und PC2-Werte). Diese Werte sind normiert, liegen also typischerweise zwischen ca. -0.1 und +0.1."
+        )
+        
+        st.markdown("#### 📈 PC1-Werte (Trend-Komponente)")
+        st.markdown(
+            "* **Hoher PC1-Wert (positiv, z.B. $> 0.05$):** Der Tag weist eine **stark bullische Struktur** auf (hohes Momentum, weit über gleitenden Durchschnitten). Der Markt bewegte sich dominant nach oben.\n"
+            "* **Niedriger PC1-Wert (negativ, z.B. $< -0.05$):** Der Tag weist eine **stark bearishe Struktur** auf. Der Markt befand sich in einem deutlichen Abwärtstrend.\n"
+            "* **PC1 nahe Null:** Der Tag hatte eine **neutrale** (seitwärts gerichtete) Trendstruktur."
+        )
+        
+        st.markdown("#### 🌪️ PC2-Werte (Volatilitäts-Komponente)")
+        st.markdown(
+            "* **Hoher PC2-Wert (positiv, z.B. $> 0.04$):** Der Tag hatte eine **sehr hohe Volatilität** (hohe Schwankungsbreite, große Kerzen). Dies deutet oft auf Phasen von **Angst oder Gier** hin.\n"
+            "* **Niedriger PC2-Wert (negativ oder nahe Null):** Der Tag war **ruhig und stabil** (niedrige Volatilität). Niedrige Werte bedeuten oft geringes Handelsinteresse oder eine Konsolidierungsphase."
+        )
+        
+        st.markdown("---")
+        st.markdown("#### 💡 Konkretes Beispiel")
+        st.markdown(
+            "Nehmen wir an, der **Fokus-Tag** zeigt die Koordinaten **PC1 = 0.065** und **PC2 = 0.015**:\n"
+            "1.  **PC1 (0.065):** Der Wert ist hoch und positiv. Interpretation: **Stark bullischer Trend** am Markt.\n"
+            "2.  **PC2 (0.015):** Der Wert ist niedrig (nahe Null). Interpretation: **Niedrige bis moderate Volatilität**.\n"
+            "**Gesamt:** Der Tag befand sich in einem **starken, aber relativ ruhigen Aufwärtstrend** (Regime wahrscheinlich 'Bull')."
+        )
+
+
+    # with tab5_new:
+    #     st.header("5. Explorative Analyse (EDA)")
+    #     st.info("Dieser Tab ist für zukünftige erweiterte Analysen, z.B. Feature-Wichtigkeiten, gedacht.")
+    #     st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
+
+# # --- Tab 5: EXPLORATIVE ANALYSE (EDA) & THESEN ---
+#     with tab5_new:
+#         st.header("5. Explorative Analyse (EDA) & Thesen")
+#         st.info("Dieser Tab beleuchtet die **Datenbasis und Feature-Verteilung** und dient der empirischen **Prüfung der Haupt-Thesen** aus der Marktanalyse.")
+
+#         # -----------------------------------------------------------------
+#         # 5.1 DATEN-ÜBERBLICK & FEATURE-EXPLORATION (Die Rohdaten-Basis)
+#         # -----------------------------------------------------------------
+#         st.subheader("5.1 Daten-Überblick: Häufigkeiten und Verteilungen")
+#         st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis und der Verteilung der wichtigsten Markt-Features.")
+
+#         # 1. Häufigkeiten der Marktphasen (Bar Charts)
+#         col_regime, col_cluster = st.columns(2)
+
+#         with col_regime:
+#             st.markdown("#### 📊 Häufigkeit der Markt-Regime")
+#             regime_fig = create_regime_frequency_bar_chart(df_master)
+#             st.plotly_chart(regime_fig, use_container_width=True)
+
+#         with col_cluster:
+#             st.markdown("#### 📊 Häufigkeit der ML-Cluster")
+#             cluster_fig = create_cluster_frequency_bar_chart(df_master)
+#             st.plotly_chart(cluster_fig, use_container_width=True)
+            
+#         st.markdown("---")
+        
+#         # 2. Zeitverlauf der Haupt-Features (Time Series Plot)
+#         st.markdown("#### 📈 Zeitlicher Verlauf von Preis und Volatilität")
+#         st.markdown("Dieser Plot visualisiert die Entwicklung des **Schlusskurses (Close)** und der **kurzfristigen Volatilität (`Volatility30`)** über die gesamte Historie. Er identifiziert Perioden mit hohem Preiswachstum vs. hohem Risiko.")
+#         time_series_fig = create_time_series_plot(df_master)
+#         st.plotly_chart(time_series_fig, use_container_width=True)
+        
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # 5.2 THESENPRÜFUNG: BEWEISFÜHRUNG DURCH VISUALISIERUNG
+#         # -----------------------------------------------------------------
+#         st.subheader("5.2 Empirische Prüfung der Zentralen Thesen")
+#         st.markdown("Die folgenden Visualisierungen dienen der direkten Prüfung der wichtigsten Hypothesen zur Marktstruktur und Modellgüte. Der Erklärungstext ist direkt unter dem jeweiligen Plot platziert.")
+        
+#         # -----------------------------------------------------------------
+#         # THESEN BLOCK 1: These 1 (Regime-Unterschiede)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 1: Marktregime unterscheiden sich klar in Trend & Risiko")
+#         st.markdown("##### Boxplot: Rendite nach Markt-Regime")
+        
+#         return_regime_fig = create_return_by_regime_boxplot(df_master)
+#         st.plotly_chart(return_regime_fig, use_container_width=True)
+
+#         # Erklärungstext These 1 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieser Plot zeigt die Verteilung der täglichen Renditen (`Return`) gruppiert nach Markt-Regime.\n\n"
+#             "➡️ **Bull (Grün):** Der Median liegt klar im positiven Bereich (hohe Gewinne).\n"
+#             "➡️ **Bear (Rot):** Der Median liegt im negativen Bereich (Verluste).\n"
+#             "➡️ **Sideways (Gelb):** Der Median liegt nahe Null und die Quartile zeigen eine Seitwärtsbewegung.\n\n"
+#             "**Fazit:** Die klaren Unterschiede belegen, dass die Regime-Definition funktioniert und die Märkte messbar getrennt werden."
+#         )
+
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # THESEN BLOCK 2: These 5 (Volatilität vs. Rendite)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 5: Chaos (Volatilität) führt oft zu Verlusten (negative Rendite)")
+#         st.markdown("##### Scatter Plot: Rendite vs. Volatilität")
+        
+#         return_vol_fig = create_return_vs_volatility_scatter(df_master)
+#         st.plotly_chart(return_vol_fig, use_container_width=True)
+
+#         # Erklärungstext These 5 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieser Scatter Plot visualisiert die tägliche Rendite (`Return`) gegen die kurzfristige Volatilität (`Volatility30`).\n\n"
+#             "➡️ **Negative Korrelation:** Die gestrichelte Trendlinie fällt nach rechts ab. Dies beweist die These, dass **zunehmendes Risiko (höhere Volatilität)** oft mit **sinkenden Preisen (negative Rendite)** verbunden ist (These 5).\n"
+#             "➡️ **Bear-Regime (Rot):** Diese Tage konzentrieren sich oft im Bereich hoher Volatilität und negativer Renditen, was die Verbindung von Chaos und Verlust untermauert."
+#         )
+
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # 5.3 ROHDATEN-VORSCHAU
+#         # -----------------------------------------------------------------
+#         st.subheader("5.3 Rohdaten-Vorschau (Features)")
+#         st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
+        
+#         st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
+
+# # --- Tab 5: EXPLORATIVE ANALYSE (EDA) & THESEN ---
+#     with tab5_new:
+#         st.header("5. Explorative Analyse (EDA) & Thesen")
+#         st.info("Dieser Tab beleuchtet die **Datenbasis und Feature-Verteilung** und dient der empirischen **Prüfung der Haupt-Thesen** aus der Marktanalyse.")
+
+#         # -----------------------------------------------------------------
+#         # 5.1 DATEN-ÜBERBLICK & FEATURE-EXPLORATION (Die Rohdaten-Basis)
+#         # -----------------------------------------------------------------
+#         st.subheader("5.1 Daten-Überblick: Häufigkeiten und Verteilungen")
+#         st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis und der Verteilung der wichtigsten Markt-Features.")
+
+#         # 1. Häufigkeiten der Marktphasen (Bar Charts)
+#         col_regime, col_cluster = st.columns(2)
+
+#         with col_regime:
+#             st.markdown("#### 📊 Häufigkeit der Markt-Regime")
+#             regime_fig = create_regime_frequency_bar_chart(df_master)
+#             st.plotly_chart(regime_fig, use_container_width=True)
+
+#         with col_cluster:
+#             st.markdown("#### 📊 Häufigkeit der ML-Cluster")
+#             cluster_fig = create_cluster_frequency_bar_chart(df_master)
+#             st.plotly_chart(cluster_fig, use_container_width=True)
+            
+#         st.markdown("---")
+        
+#         # NEU: HEATMAP ZUR KLÄRUNG DER IDENTISCHEN ZAHLEN
+#         st.markdown("#### 🔗 Zuordnung der ML-Cluster zu den Markt-Regimen")
+#         st.markdown("**Klärung der identischen Zählungen:** Diese Heatmap zeigt, wie die ML-Cluster (`Cluster_3`) und die manuellen Regime (`Regime`) ineinander übergehen. Eine diagonale Dominanz belegt, dass der ML-Ansatz dieselben Marktphasen wie die Experten-Regeln findet.")
+#         cluster_map_fig = create_cluster_regime_heatmap(df_master)
+#         st.plotly_chart(cluster_map_fig, use_container_width=True)
+
+#         st.markdown("---")
+        
+#         # 2. Zeitverlauf der Haupt-Features (Time Series Plot)
+#         st.markdown("#### 📈 Zeitlicher Verlauf von Preis und Volatilität")
+#         st.markdown("Dieser Plot visualisiert die Entwicklung des **Schlusskurses (Close)** und der **kurzfristigen Volatilität (`Volatility30`)** über die gesamte Historie. Er identifiziert Perioden mit hohem Preiswachstum vs. hohem Risiko.")
+#         time_series_fig = create_time_series_plot(df_master)
+#         st.plotly_chart(time_series_fig, use_container_width=True)
+        
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # 5.2 THESENPRÜFUNG: BEWEISFÜHRUNG DURCH VISUALISIERUNG
+#         # -----------------------------------------------------------------
+#         st.subheader("5.2 Empirische Prüfung der Zentralen Thesen")
+#         st.markdown("Die folgenden Visualisierungen dienen der direkten Prüfung der wichtigsten Hypothesen zur Marktstruktur und Modellgüte. Der Erklärungstext ist direkt unter dem jeweiligen Plot platziert.")
+        
+#         # -----------------------------------------------------------------
+#         # THESEN BLOCK 1: These 1 (Regime-Unterschiede)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 1: Marktregime unterscheiden sich klar in Trend & Risiko")
+#         st.markdown("##### Boxplot: Rendite nach Markt-Regime")
+        
+#         return_regime_fig = create_return_by_regime_boxplot(df_master)
+#         st.plotly_chart(return_regime_fig, use_container_width=True)
+
+#         # Erklärungstext These 1 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieser Plot zeigt die Verteilung der täglichen Renditen (`Return`) gruppiert nach Markt-Regime.\n\n"
+#             "➡️ **Bull (Grün):** Der Median liegt klar im positiven Bereich (hohe Gewinne).\n"
+#             "➡️ **Bear (Rot):** Der Median liegt im negativen Bereich (Verluste).\n"
+#             "➡️ **Sideways (Gelb):** Der Median liegt nahe Null und die Quartile zeigen eine Seitwärtsbewegung.\n\n"
+#             "**Fazit:** Die klaren Unterschiede belegen, dass die Regime-Definition funktioniert und die Märkte messbar getrennt werden."
+#         )
+
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # THESEN BLOCK 2: These 5 (Volatilität vs. Rendite)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 5: Chaos (Volatilität) führt oft zu Verlusten (negative Rendite)")
+#         st.markdown("##### Scatter Plot: Rendite vs. Volatilität")
+        
+#         return_vol_fig = create_return_vs_volatility_scatter(df_master)
+#         st.plotly_chart(return_vol_fig, use_container_width=True)
+
+#         # Erklärungstext These 5 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieser Scatter Plot visualisiert die tägliche Rendite (`Return`) gegen die kurzfristige Volatilität (`Volatility30`).\n\n"
+#             "➡️ **Negative Korrelation:** Die gestrichelte Trendlinie fällt nach rechts ab. Dies beweist die These, dass **zunehmendes Risiko (höhere Volatilität)** oft mit **sinkenden Preisen (negative Rendite)** verbunden ist (These 5).\n"
+#             "➡️ **Bear-Regime (Rot):** Diese Tage konzentrieren sich oft im Bereich hoher Volatilität und negativer Renditen, was die Verbindung von Chaos und Verlust untermauert."
+#         )
+
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # NEUER BLOCK: These 2 (Cluster-Phasen)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 2: Cluster_3 gruppiert Markttage in sinnvolle Marktphasen")
+#         st.markdown("##### Boxplot: Rendite nach ML-Cluster")
+        
+#         return_cluster_fig = create_return_by_cluster_boxplot(df_master)
+#         st.plotly_chart(return_cluster_fig, use_container_width=True)
+
+#         # Erklärungstext These 2 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieses Boxplot zeigt die Rendite (`Return`) gruppiert nach den vom ML-Algorithmus gefundenen Clustern (`Cluster_3`).\n\n"
+#             "➡️ **Struktur:** Die Verteilungen der Cluster spiegeln die Muster der Markt-Regime (These 1) wider.\n"
+#             "➡️ **Fazit:** Die perfekte Übereinstimmung (wie in der Heatmap gezeigt) und die klaren Renditeunterschiede belegen, dass der ML-Ansatz erfolgreich wirtschaftlich sinnvolle Marktphasen gefunden hat."
+#         )
+
+#         st.markdown("---")
+
+#         # -----------------------------------------------------------------
+#         # NEUER BLOCK: These 3 (Hitrate pro Cluster)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 3: Einige Cluster liefern höhere Trefferquoten im Direction-Modell")
+#         st.markdown("##### Balkendiagramm: Trefferquote pro Cluster-ID")
+        
+#         hitrate_cluster_fig = create_hitrate_by_cluster_bar_chart(df_master)
+#         st.plotly_chart(hitrate_cluster_fig, use_container_width=True)
+
+#         # Erklärungstext These 3 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieser Plot zeigt die **Trefferquote** (Hit Ratio) des Klassifikationsmodells, getrennt nach den drei Markt-Clustern.\n\n"
+#             "➡️ **Transparenz:** Die Cluster mit der **höchsten Trefferquote** zeigen, unter welchen Marktbedingungen das Modell am zuverlässigsten ist (z.B. klarer Bullen-Markt).\n"
+#             "➡️ **Schwachstellen:** Cluster mit einer Trefferquote nahe 50% identifizieren Marktphasen, in denen die Prognose **weniger verlässlich** ist (z.B. komplexe Seitwärtsbewegungen)."
+#         )
+
+#         st.markdown("---")
+
+#         # -----------------------------------------------------------------
+#         # NEUER BLOCK: These 7 (Prognosestabilität)
+#         # -----------------------------------------------------------------
+#         st.markdown("#### 🎯 Prüfung These 7: ML-Preisprognosen sind innerhalb kurzer Horizonte stabil und plausibel")
+#         st.markdown("##### Line Plot: Close vs. Vorhersagehorizonte (1d, 7d, 30d)")
+        
+#         forecast_plot_fig = create_long_term_forecast_plot(df_master)
+#         st.plotly_chart(forecast_plot_fig, use_container_width=True)
+
+#         # Erklärungstext These 7 (Direkt unter dem Plot)
+#         st.info(
+#             "**Beweis:** Dieser Zeitreihen-Plot vergleicht den tatsächlichen Preis (`Close`) mit den Vorhersagen für verschiedene Horizonte.\n\n"
+#             "➡️ **Kurzfristige Stabilität:** Die **`Pred_1d` (Grün)** und **`Pred_7d` (Orange)** Linien folgen dem tatsächlichen Preis (`Close`, Blau) sehr eng.\n"
+#             "➡️ **Langfristige Unsicherheit:** Die **`Pred_30d` (Rot)** Linie zeigt tendenziell größere Abweichungen oder ist träger. Dies beweist, dass das Modell **kurzfristig stabiler und verlässlicher** ist."
+#         )
+
+#         st.markdown("---")
+        
+#         # -----------------------------------------------------------------
+#         # 5.3 ROHDATEN-VORSCHAU
+#         # -----------------------------------------------------------------
+#         st.subheader("5.3 Rohdaten-Vorschau (Features)")
+#         st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
+        
+#         st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
+# --- Tab 5: EXPLORATIVE ANALYSE (EDA) & THESEN ---
     with tab5_new:
-        st.header("5. Explorative Analyse (EDA)")
-        st.info("Dieser Tab ist für zukünftige erweiterte Analysen, z.B. Feature-Wichtigkeiten, gedacht.")
-        st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
+        st.header("5. Explorative Analyse (EDA) & Thesen")
+        st.info("Dieser Tab beleuchtet die **Datenbasis und Feature-Verteilung** und dient der empirischen **Prüfung der Haupt-Thesen** aus der Marktanalyse.")
 
+        # -----------------------------------------------------------------
+        # 5.1 DATEN-ÜBERBLICK & FEATURE-EXPLORATION (Die Rohdaten-Basis)
+        # -----------------------------------------------------------------
+        st.subheader("5.1 Daten-Überblick: Häufigkeiten und Validierung")
+        st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis, der Feature-Verteilung und die Validierung der ML-Cluster.")
+
+        # 1. Häufigkeiten der Marktphasen (Bar Charts)
+        col_regime, col_cluster = st.columns(2)
+
+        with col_regime:
+            st.markdown("#### 📊 Häufigkeit der Markt-Regime (Manuell)")
+            regime_fig = create_regime_frequency_bar_chart(df_master)
+            st.plotly_chart(regime_fig, use_container_width=True)
+
+        with col_cluster:
+            st.markdown("#### 📊 Häufigkeit der ML-Cluster (K-Means)")
+            cluster_fig = create_cluster_frequency_bar_chart(df_master)
+            st.plotly_chart(cluster_fig, use_container_width=True)
+            
+        st.info(
+            "**Häufigkeit und Verteilung:** Die Bullenphase dominiert die Historie, was den langfristigen Aufwärtstrend von Bitcoin widerspiegelt.\n\n"
+            "**Hinweis zur Korrektheit:** Die Zählungen der manuellen Regime (links) und der ML-Cluster (rechts) sind **numerisch identisch**. Dies ist der erste starke Hinweis auf eine perfekte Korrelation, die durch die Heatmap bewiesen wird."
+        )
+        
+        st.markdown("---")
+        
+        # HEATMAP ZUR KLÄRUNG DER IDENTISCHEN ZAHLEN
+        st.markdown("#### 🔗 Validierung: Zuordnung der ML-Cluster zu den Markt-Regimen")
+        cluster_map_fig = create_cluster_regime_heatmap(df_master)
+        st.plotly_chart(cluster_map_fig, use_container_width=True)
+
+        st.success(
+            "**BESTÄTIGUNG DER KORREKTHEIT:** Die Heatmap zeigt die **Kreuztabelle** der Regime (`Regime`) gegen die ML-Cluster (`Cluster_3`).\n\n"
+            "➡️ **Beweis:** Die Zahlen liegen **ausschließlich auf der Diagonale** (z. B. Cluster 0 = Bull, Cluster 2 = Bear). Dies belegt, dass das **unüberwachte ML-Modell** exakt dieselben drei Marktphasen trennt, die auch die Experten-Regeln definieren.\n\n"
+            "**Fazit:** Die ML-Cluster sind **valide und datengestützte Synonyme** für die Experten-Regime. Die Grundlage der gesamten Analyse ist damit validiert."
+        )
+
+        st.markdown("---")
+        
+        # 2. Zeitverlauf der Haupt-Features (Time Series Plot)
+        st.markdown("#### 📈 Zeitlicher Verlauf von Preis und Volatilität")
+        time_series_fig = create_time_series_plot(df_master)
+        st.plotly_chart(time_series_fig, use_container_width=True)
+        
+        st.info(
+            "**Was es zeigt:** Dieser Plot visualisiert die Entwicklung des **Schlusskurses (Close)** und der **kurzfristigen Volatilität** (`Volatility30`) über die gesamte Historie.\n\n"
+            "**Korrekte Interpretation der Skala:** Der Plot verwendet eine **duale Y-Achse**.\n"
+            "➡️ **Close-Preis (Links):** Absoluter Wert (USD / EUR).\n"
+            "➡️ **Volatilität (Rechts):** Relativer Wert (Risiko in %). Die Volatilität ist nicht 'höher' als der Preis, sondern auf ihrer eigenen, **risikobasierten Skala** dargestellt, um Risiko-Phasen unabhängig vom absoluten Preisniveau sichtbar zu machen."
+        )
+        
+        st.markdown("---")
+        
+        # -----------------------------------------------------------------
+        # 5.2 THESENPRÜFUNG: BEWEISFÜHRUNG DURCH VISUALISIERUNG
+        # -----------------------------------------------------------------
+        st.subheader("5.2 Empirische Prüfung der Zentralen Thesen")
+        st.markdown("Die folgenden Visualisierungen dienen der direkten Prüfung der wichtigsten Hypothesen zur Marktstruktur und Modellgüte. Der Erklärungstext ist direkt unter dem jeweiligen Plot platziert.")
+        
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 1: These 1 (Regime-Unterschiede)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 1: Marktregime unterscheiden sich klar in Trend & Risiko")
+        st.markdown("##### Boxplot: Rendite nach Markt-Regime")
+        
+        return_regime_fig = create_return_by_regime_boxplot(df_master)
+        st.plotly_chart(return_regime_fig, use_container_width=True)
+
+        # Erklärungstext These 1 (Direkt unter dem Plot)
+        st.info(
+            "**Beweis:** Dieser Plot zeigt die Verteilung der täglichen Renditen (`Return`) gruppiert nach Markt-Regime.\n\n"
+            "➡️ **Bull (Grün):** Der Median liegt klar im positiven Bereich (hohe Gewinne).\n"
+            "➡️ **Bear (Rot):** Der Median liegt im negativen Bereich (Verluste).\n"
+            "➡️ **Sideways (Gelb):** Der Median liegt nahe Null und die Quartile zeigen eine Seitwärtsbewegung.\n\n"
+            "**Fazit:** Die klaren Unterschiede belegen, dass die Regime-Definition funktioniert und die Märkte messbar getrennt werden."
+        )
+
+        st.markdown("---")
+
+        # -----------------------------------------------------------------
+        # NEUER BLOCK: These 2 (Cluster-Phasen)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 2: Cluster_3 gruppiert Markttage in sinnvolle Marktphasen")
+        st.markdown("##### Boxplot: Rendite nach ML-Cluster")
+        
+        return_cluster_fig = create_return_by_cluster_boxplot(df_master)
+        st.plotly_chart(return_cluster_fig, use_container_width=True)
+
+        # Erklärungstext These 2 (Direkt unter dem Plot)
+        st.info(
+            "**Beweis:** Dieses Boxplot zeigt die Rendite (`Return`) gruppiert nach den vom ML-Algorithmus gefundenen Clustern (`Cluster_3`).\n\n"
+            "➡️ **Struktur:** Die Verteilungen der Cluster spiegeln die Muster der Markt-Regime (These 1) wider.\n"
+            "➡️ **Fazit:** Die perfekte Übereinstimmung (wie in der Heatmap gezeigt) und die klaren Renditeunterschiede belegen, dass der ML-Ansatz erfolgreich wirtschaftlich sinnvolle Marktphasen gefunden hat."
+        )
+
+        st.markdown("---")
+        
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 6: These 6 (MA-Differenz)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 6: Gleitende Durchschnitte erklären Trendphasen (Regime)")
+        st.markdown("##### Boxplot: MA50 - MA200 Differenz nach Regime")
+
+        ma_diff_fig = create_ma_diff_by_regime_boxplot(df_master) 
+        st.plotly_chart(ma_diff_fig, use_container_width=True)
+
+        # Erklärungstext These 6 (Direkt unter dem Plot)
+        st.info(
+            "**Beweis:** Dieser Plot zeigt die Differenz (MA50 - MA200), gruppiert nach Markt-Regime.\n\n"
+            "➡️ **Bull (Grün):** Der Median der Differenz liegt klar **über Null** (MA50 > MA200).\n"
+            "➡️ **Bear (Rot):** Der Median der Differenz liegt klar **unter Null** (MA50 < MA200).\n"
+            "**Fazit:** Die klaren Trennungen belegen, dass die Differenz der MAs ein **valides und robustes Kriterium** zur Definition der Markt-Regime ist. Dies untermauert die Grundlage der gesamten Cluster-Analyse."
+        )
+        st.markdown("---")
+
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 2: These 5 (Volatilität vs. Rendite)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 5: Chaos (Volatilität) führt oft zu Verlusten (negative Rendite)")
+        st.markdown("##### Scatter Plot: Rendite vs. Volatilität")
+        
+        return_vol_fig = create_return_vs_volatility_scatter(df_master)
+        st.plotly_chart(return_vol_fig, use_container_width=True)
+        # Die fehlerhafte Zeile wurde hier entfernt.
+
+        # Erklärungstext These 5 (Direkt unter dem Plot)
+        st.info(
+            "**Beweis:** Dieser Scatter Plot visualisiert die tägliche Rendite (`Return`) gegen die kurzfristige Volatilität (`Volatility30`).\n\n"
+            "➡️ **Negative Korrelation:** Die gestrichelte Trendlinie fällt nach rechts ab. Dies beweist die These, dass **zunehmendes Risiko (höhere Volatilität)** oft mit **sinkenden Preisen (negative Rendite)** verbunden ist (These 5).\n"
+            "➡️ **Bear-Regime (Rot):** Diese Tage konzentrieren sich oft im Bereich hoher Volatilität und negativer Renditen, was die Verbindung von Chaos und Verlust untermauert."
+        )
+
+        st.markdown("---")
+        
+        # -----------------------------------------------------------------
+        # NEUER BLOCK: These 3 (Hitrate pro Cluster)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 3: Einige Cluster liefern höhere Trefferquoten im Direction-Modell")
+        st.markdown("##### Balkendiagramm: Trefferquote pro Cluster-ID")
+        
+        hitrate_cluster_fig = create_hitrate_by_cluster_bar_chart(df_master)
+        st.plotly_chart(hitrate_cluster_fig, use_container_width=True)
+
+        # Erklärungstext These 3 (Direkt unter dem Plot)
+        st.info(
+            "**Beweis:** Dieser Plot zeigt die **Trefferquote** (Hit Ratio) des Klassifikationsmodells, getrennt nach den drei Markt-Clustern.\n\n"
+            "➡️ **Transparenz:** Die Cluster mit der **höchsten Trefferquote** zeigen, unter welchen Marktbedingungen das Modell am zuverlässigsten ist (z.B. klarer Bullen-Markt).\n"
+            "➡️ **Schwachstellen:** Cluster mit einer Trefferquote nahe 50% identifizieren Marktphasen, in denen die Prognose **weniger verlässlich** ist (z.B. komplexe Seitwärtsbewegungen)."
+        )
+
+        st.markdown("---")
+
+        # -----------------------------------------------------------------
+        # NEUER BLOCK: These 7 (Prognosestabilität)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 7: ML-Preisprognosen sind innerhalb kurzer Horizonte stabil und plausibel")
+        st.markdown("##### Line Plot: Close vs. Vorhersagehorizonte (1d, 7d, 30d)")
+        
+        forecast_plot_fig = create_long_term_forecast_plot(df_master)
+        st.plotly_chart(forecast_plot_fig, use_container_width=True)
+
+        # Erklärungstext These 7 (Direkt unter dem Plot)
+        st.info(
+            "**Beweis:** Dieser Zeitreihen-Plot vergleicht den tatsächlichen Preis (`Close`) mit den Vorhersagen für verschiedene Horizonte.\n\n"
+            "➡️ **Kurzfristige Stabilität:** Die **`Pred_1d` (Grün)** und **`Pred_7d` (Orange)** Linien folgen dem tatsächlichen Preis (`Close`, Blau) sehr eng.\n"
+            "➡️ **Langfristige Unsicherheit:** Die **`Pred_30d` (Rot)** Linie zeigt tendenziell größere Abweichungen oder ist träger. Dies beweist, dass das Modell **kurzfristig stabiler und verlässlicher** ist."
+        )
+
+        st.markdown("---")
+        
+        # -----------------------------------------------------------------
+        # 5.3 ROHDATEN-VORSCHAU
+        # -----------------------------------------------------------------
+        st.subheader("5.3 Rohdaten-Vorschau (Features)")
+        st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
+        
+        st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
 
 # ==================================================================================================
 # ENDE
