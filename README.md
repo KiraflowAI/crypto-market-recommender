@@ -1,198 +1,203 @@
-# 🧠 Machine Learning–based Crypto & Market Analysis App
+# ₿ Crypto Market Recommender  
+_Ein interaktives Streamlit-Dashboard zur Analyse, Clusterbildung & ML-Vorhersage von Bitcoin-Marktphasen_
 
-Interaktive Analyseplattform für Kryptowährungen, Indizes, Rohstoffe und ausgewählte Aktien – mit Machine Learning, Clustering und technischen Indikatoren.  
-Datenquelle: **yfinance (Yahoo Finance)** → **kein API-Key nötig**.
-
----
-
-# 🇩🇪 DEUTSCH
----
-
-## 📌 Projektbeschreibung
-
-Dieses Projekt ist mein **Abschlussprojekt im Bereich Data Science / Machine Learning**.  
-Ziel: Eine **Streamlit-Webanwendung**, die Finanzmärkte analysiert, Muster erkennt und einfache ML-Vorhersagen liefert – leicht verständlich auch für Nicht-Techniker.
-
-Die App:
-
-- lädt Marktdaten via **yfinance** (öffentliche Daten, kein Token),
-- berechnet technische Indikatoren,
-- trainiert ML-Modelle,
-- visualisiert Marktregime & Muster,
-- und bietet ein professionelles Dashboard.
+Dieses Projekt untersucht den Bitcoin-Markt mithilfe explorativer Datenanalyse, Machine Learning (Clustering, Klassifikation, Regression) und statistischer Methoden.  
+Alle Modelle liegen **fertig trainiert** im Repository – die App kann **ohne erneutes Training** direkt gestartet werden.
 
 ---
 
-## 🎯 Funktionsumfang
+## 🚀 Features der Streamlit-App
 
-### 1. Unterstützte Märkte
+### **1. Markt-Regime Analyse (Bull / Sideways / Bear)**
+- Identifikation ökonomischer Marktphasen  
+- Häufigkeiten & statistische Kennzahlen pro Regime  
+- Rendite-, Volatilitäts- & Momentum-Auswertungen  
+- MA50–MA200 Trendindikator zur strukturellen Regimebestätigung  
 
-**Krypto:** BTC, ETH, BNB, SOL, DOGE  
-**Indizes:** S&P 500, Nasdaq100, Dow Jones, DAX, VIX  
-**Rohstoffe:** Gold, Silber, Erdgas, Öl (WTI/Brent), Kupfer, Platin, Palladium  
-**Aktien:** AAPL, MSFT, TSLA, NVDA, META, AMZN, ASML, SAP.DE usw.
+### **2. ML-Clustering (KMeans & Vergleichsmodelle)**
+- KMeans als Hauptmodell zur Marktphasen-Erkennung  
+- Alternative Modelle: MiniBatchKMeans, GMM, VBGMM, Spectral  
+- PCA-2D-Visualisierung aller Tage  
+- Interpretation der Cluster (Returns, Volatilität, Momentum)
 
----
+### **3. Preisvorhersage (Regression)**
+- Modelle: Linear, Ridge, Lasso, ElasticNet, RandomForest  
+- Analyse der Modellgüte (RMSE, R²)  
+- Prognose der täglichen Preisveränderung  
 
-### 2. Timeframes & Zeiträume
+### **4. Up/Down-Vorhersage (Direction Classification)**
+- Modelle: Logistic Regression, SVM, KNN, RandomForest, GradientBoosting  
+- F1-Scores & Performancevergleich  
+- Visualisierung der Grenzen kurzfristiger Trendvorhersagen  
 
-📌 **Candlestick-Timeframes:**
-- 15m, 30m  
-- 1h, 4h  
-- 1d, 1w, 1M
-
-📌 **Analyse-Zeiträume:**
-- Gesamte Historie
-- Letzte 30 / 90 Tage
-- Letztes Jahr
-- Letzte 2 Jahre
-- Individueller Zeitraum (Start–Enddatum)
-
----
-
-### 3. Feature Engineering
-
-Indikatoren:
-- SMA / EMA (20/50/200)
-- RSI
-- MACD
-- Bollinger Bänder
-- ATR
-- Log Returns
-- Prozentveränderungen
-- Rolling Volatilität
+### **5. Explorative Datenanalyse (EDA)**
+- Return-Histogramme & Ausreißer  
+- Volatilitätsanalyse  
+- Korrelationsmatrix  
+- Zeitreihen (Preis & Volatilität)  
+- Häufigkeiten der Regime & Cluster  
 
 ---
 
-### 4. Modelle
+## 📁 Projektstruktur
 
-📌 **Klassische ML-Modelle**
-- RandomForestClassifier  
-- Logistic Regression  
-- KMeans-Clustering  
-- KNN (ähnliche Marktphasen finden)
+crypto-market-recommender/
+│
+├── app/
+│ └── btc_dashboard.py # Haupt-Streamlit-App
+│
+├── data/
+│ ├── raw/ # Ungereinigte historische Daten (BTC + Indizes)
+│ └── processed/ # Alle verarbeiteten CSVs & Modell-Outputs
+│ ├── btc_clean.csv
+│ ├── btc_view.csv
+│ ├── btc_master_view_final.csv
+│ ├── btc_clusters.csv
+│ ├── btc_clusters_pca.csv
+│ ├── price_daily_model_metrics.csv
+│ ├── clustering_metrics.csv
+│ └── clustering_labels_all_models.joblib
+│
+├── models/
+│ ├── clustering/ # KMeans, GMM, VB-GMM, MiniBatchKMeans + Scaler
+│ ├── direction/ # Klassifikationsmodelle + direction_model_metrics.csv
+│ └── price_daily/ # Regressionsmodelle (1d, 7d, 30d, 90d, 365d)
+│
+├── notebooks/ # Reproduzierbare Jupyter-Notebooks
+│ ├── 01_explore_data.ipynb
+│ ├── 02_classification_direction.ipynb
+│ ├── 03_clustering_market_regimes.ipynb
+│ ├── 04_regression_price.ipynb
+│ └── 05_master_view.ipynb
+│
+├── scripts/
+│ ├── fetch_data.py # (Optional) Rohdatenabruf
+│ └── src/
+│
+├── requirements.txt
+└── README.md
 
-📌 **Deep Learning (optional)**
-- LSTM für Zeitreihen  
-- optional GRU / CNN
-
----
-
-### 5. Streamlit-App – Seiten
-
-1. **Marktübersicht**  
-2. **Indikatoren & Features**  
-3. **ML-Klassifikation (Up/Down)**  
-4. **Cluster & ähnliche Marktphasen**  
-5. **Thesen & Nachweise**  
-6. **Ausblick / Erweiterungen**
-
----
-
-### 6. Tech Stack
-
-- Python 3.10+
-- yfinance (keine API-Keys)
-- pandas, numpy
-- scikit-learn
-- (optional) tensorflow / pytorch
-- streamlit, plotly
-- Git LFS für .joblib-Modelle
-
----
-
-# ——————————————————————————————————————
-# 🇬🇧 ENGLISH
-# ——————————————————————————————————————
-
-## 📌 Project Description
-
-This project is my **final Data Science / Machine Learning project**.  
-It provides an **interactive Streamlit web app** to explore financial markets, detect patterns, and run simple machine-learning predictions.
-
-Data is loaded via **yfinance (Yahoo Finance public data – no personal API key required).**
 
 ---
 
-## 🎯 Features
+## ⚙️ Voraussetzungen
 
-### 1. Supported Markets
-
-**Crypto:** BTC, ETH, BNB, SOL, DOGE  
-**Indices:** S&P500, Nasdaq100, Dow Jones, DAX, VIX  
-**Commodities:** Gold, Silver, Oil, Natural Gas, Copper, Platinum, Palladium  
-**Stocks:** AAPL, MSFT, NVDA, TSLA, META, AMZN, ASML, SAP.DE, etc.
+- **Python 3.10 – 3.11**  
+- Git  
+- Virtuelle Umgebung empfohlen (venv)
 
 ---
 
-### 2. Timeframes & Date Ranges
+## 🚀 Quickstart – Projekt starten
 
-📌 **Candlestick Timeframes:**
-- 15m, 30m  
-- 1h, 4h  
-- 1d, 1w, 1M  
+<!-- ```bash
+# 1) Repository klonen
+git clone https://github.com/KiraflowAI/crypto-market-recommender.git
+cd crypto-market-recommender
 
-📌 **Date Range Filters:**
-- Full historical data  
-- Last 30 / 90 days  
-- Last 1 / 2 years  
-- Custom range (start–end date)
+# 2) Virtuelle Umgebung erstellen
+python -m venv .venv
 
----
+# macOS/Linux:
+source .venv/bin/activate
 
-### 3. Feature Engineering
+# Windows (PowerShell):
+# .\.venv\Scripts\Activate.ps1
 
-Indicators:
-- SMA / EMA (20/50/200)
-- RSI
-- MACD
-- Bollinger Bands
-- ATR
-- Log returns
-- Percentage changes
-- Rolling volatility
+# 3) Pip aktualisieren
+python -m pip install --upgrade pip
 
----
-
-### 4. Models
-
-📌 **Classical ML**
-- RandomForestClassifier  
-- Logistic Regression  
-- KMeans clustering  
-- KNN similarity search  
-
-📌 **Deep Learning (optional)**
-- LSTM for time series  
-- optional GRU / CNN variants
-
----
-
-### 5. Streamlit App – Pages
-
-1. **Market Overview**  
-2. **Indicators & Feature Plots**  
-3. **ML Classification (Up/Down prediction)**  
-4. **Clusters & Similar Market Phases**  
-5. **Hypotheses & Evidence**  
-6. **Future Work**
-
----
-
-### 6. Tech Stack
-
-- Python 3.10+  
-- yfinance (no user token)  
-- pandas / numpy  
-- scikit-learn  
-- tensorflow or pytorch (optional)  
-- streamlit + plotly  
-- Git LFS for model storage  
-
----
-
-## 🔧 Quickstart
-
-```bash
+# 4) Dependencies installieren
 pip install -r requirements.txt
-streamlit run app/main_app.py
+
+# 5) Streamlit starten
+streamlit run app/btc_dashboard.py -->
+
+Die App startet auf:
+
+👉 http://localhost:8501
+
+📊 Datenquellen
+
+Dieses Projekt nutzt frei verfügbare historische Daten, u. a.:
+
+Bitcoin OHLCV (1D)
+
+VIX Index
+
+S&P500 (^GSPC)
+
+NASDAQ (^NDX)
+
+DAX (^GDAXI)
+
+Dow Jones (^DJI)
+
+Keine API-Keys erforderlich.
+
+📊 Datenquellen
+
+Dieses Projekt nutzt frei verfügbare historische Daten, u. a.:
+
+Bitcoin OHLCV (1D)
+
+Keine API-Keys erforderlich.
+
+🧠 Modelle im Projekt
+Clustering
+
+KMeans — Hauptmodell (Cluster_3)
+
+GMM, VBGMM, MiniBatchKMeans, Spectral — Vergleichsmodelle
+
+PCA (2D) für Visualisierungen
+
+Direction Classification
+
+Logistic Regression
+
+Support Vector Machine (SVM)
+
+KNN Classifier
+
+RandomForestClassifier
+
+GradientBoostingClassifier
+→ Alle Modelle werden mit F1-Score verglichen.
+
+Price Regression
+
+Linear Regression
+
+Ridge
+
+Lasso
+
+ElasticNet
+
+RandomForest Regressor
+→ Metriken: RMSE, MAE, R²
+
+Alle trainierten Modelle liegen im Repository unter:
+models/
+
+🧪 Reproduzierbarkeit
+
+Alle Schritte sind dokumentiert in:
+
+01_explore_data.ipynb
+
+02_classification_direction.ipynb
+
+03_clustering_market_regimes.ipynb
+
+04_regression_price.ipynb
+
+05_master_view.ipynb
+
+Diese Notebooks erzeugen exakt dieselben Dateien, die die Streamlit-App später nutzt.
+
+❗ Hinweise
+
+Dieses Projekt dient Bildungs- und Analysezwecken.
+Es ist nicht zur finanziellen Entscheidungsfindung gedacht.
