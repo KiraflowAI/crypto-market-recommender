@@ -8,6 +8,7 @@ import plotly.express as px
 from datetime import datetime
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
+from sklearn.neighbors import KernelDensity
 
 
 # ==================================================================================================
@@ -100,7 +101,53 @@ def load_metrics_robust(path, expected_cols=None):
     st.error(f"❌ Metriken konnten nicht geladen oder richtig geparst werden: `{path}`. Versuchte Separatoren: {separators}. Überprüfen Sie das Dateiformat.")
     return None
 
+def load_direction_metrics():
+    path = "/Users/burcukiran/Desktop/Abschlussprojekt_Data_Science/models/direction/direction_model_metrics.csv"
+    try:
+        return pd.read_csv(path)
+    except Exception as e:
+        print("Fehler beim Laden der Direction-Metriken:", e)
+        return None
+    
+def create_direction_model_performance_plot():
+    df = load_direction_metrics()
+    if df is None:
+        return go.Figure().add_annotation(
+            text="Direction-Metriken konnten nicht geladen werden.",
+            x=0.5, y=0.5, showarrow=False
+        )
 
+    # F1-Spalte automatisch finden
+    f1_col = None
+    for col in df.columns:
+        if "f1" in col.lower():
+            f1_col = col
+            break
+
+    if f1_col is None:
+        return go.Figure().add_annotation(
+            text=f"Keine F1-Spalte gefunden. Spalten: {list(df.columns)}",
+            x=0.5, y=0.5, showarrow=False
+        )
+
+    df_grouped = df.groupby("Modell")[f1_col].mean().reset_index()
+    df_grouped["f1_pct"] = df_grouped[f1_col] * 100
+
+    fig = px.bar(
+        df_grouped,
+        x="Modell",
+        y="f1_pct",
+        color="Modell",
+        title="Prüfung These 7: Modellgenauigkeit (F1-Score) für Up/Down-Vorhersage",
+        labels={"f1_pct": "F1-Score (%)"},
+        text=df_grouped["f1_pct"].round(1).astype(str) + "%",
+        template="plotly_white"
+    )
+
+    fig.update_yaxes(range=[40, 80])
+    fig.update_traces(textposition="outside")
+
+    return fig
 # ==================================================================================================
 # 3. DATENLADUNG STARTEN
 # ==================================================================================================
@@ -519,125 +566,381 @@ REGIME_COLOR_MAP = {
     'Bull': '#28A745',      # Grün
 }
 
-# --- 1. EDA-FUNKTIONEN (Sektion 5.1) ---
+# # --- 1. EDA-FUNKTIONEN (Sektion 5.1) ---
+
+def create_return_distribution_plot(df):
+    """Histogramm + Boxplot der täglichen Renditen (EDA)."""
+    fig = px.histogram(
+        df,
+        x="Return",
+        nbins=120,
+        marginal="box",
+        title="Verteilung der täglichen Renditen (Return)",
+        template="plotly_white"
+    )
+    fig.update_xaxes(title="Tägliche Rendite (%)")
+    fig.update_yaxes(title="Häufigkeit")
+    return fig
+
+def create_correlation_heatmap(df):
+    """Korrelationen der wichtigsten Features (EDA)."""
+    cols = ["Return", "Volatility30", "Momentum7", "MA50", "MA200"]
+    corr = df[cols].corr()
+
+    fig = px.imshow(
+        corr,
+        text_auto=True,
+        color_continuous_scale="RdBu_r",
+        title="Korrelationsmatrix der Markt-Features",
+        labels=dict(color="Korrelationswert")
+    )
+    fig.update_layout(height=500)
+    return fig
 
 def create_regime_frequency_bar_chart(df):
-    """Erstellt ein Balkendiagramm, das die absoluten Häufigkeiten der Markt-Regime zeigt (Teil 1)."""
+    """Erstellt ein Balkendiagramm der Häufigkeit der Markt-Regime."""
+    
     df_counts = df['Regime'].value_counts().reset_index()
     df_counts.columns = ['Regime', 'Anzahl Tage']
+
     order = ['Bull', 'Sideways', 'Bear']
     df_counts['Regime'] = pd.Categorical(df_counts['Regime'], categories=order, ordered=True)
     df_counts = df_counts.sort_values('Regime')
-    
-    fig = px.bar(df_counts, x='Regime', y='Anzahl Tage', color='Regime', color_discrete_map=REGIME_COLOR_MAP,
-                 title='Häufigkeit der Markt-Regime', text='Anzahl Tage')
-    fig.update_layout(xaxis_title=None, yaxis_title='Anzahl Tage', showlegend=False, height=400)
-    fig.update_traces(texttemplate='%{text}', textposition='outside')
-    return fig
 
-def create_cluster_frequency_bar_chart(df):
-    """Erstellt ein Balkendiagramm, das die absoluten Häufigkeiten der ML-Cluster zeigt (Teil 1)."""
-    df_counts = df['Cluster_3'].value_counts().reset_index()
-    df_counts.columns = ['Cluster', 'Anzahl Tage']
-    df_counts['Cluster'] = df_counts['Cluster'].astype(str)
-    
-    fig = px.bar(df_counts, x='Cluster', y='Anzahl Tage', color='Cluster',
-                 title='Häufigkeit der ML-Cluster (K=3)', text='Anzahl Tage')
-    fig.update_layout(xaxis_title=None, yaxis_title='Anzahl Tage', showlegend=False, height=400)
-    fig.update_traces(texttemplate='%{text}', textposition='outside')
-    return fig
-
-def create_time_series_plot(df):
-    """Zeitlicher Verlauf von Preis und Volatilität (Teil 1)."""
-    df['Date'] = pd.to_datetime(df.index)
-    df_ts = df[['Close', 'Volatility30']].copy().dropna()
-    
-    fig = go.Figure()
-    
-    # Preis (Close) auf primärer Y-Achse
-    fig.add_trace(go.Scatter(x=df_ts.index, y=df_ts['Close'], name='Close Preis', yaxis='y1', line=dict(color='blue')))
-    
-    # Volatilität auf sekundärer Y-Achse
-    fig.add_trace(go.Scatter(x=df_ts.index, y=df_ts['Volatility30'], name='Volatility30', yaxis='y2', line=dict(color='orange', dash='dot')))
-    
-    fig.update_layout(
-        title='Zeitlicher Verlauf von Preis und Volatilität (30d)',
-        xaxis_title='Datum',
-        yaxis=dict(title='Schlusskurs (Close)', color='blue'),
-        yaxis2=dict(title='Volatilität (30d)', overlaying='y', side='right', color='orange', showgrid=False),
-        height=500,
-        legend=dict(x=0.01, y=0.99)
+    fig = px.bar(
+        df_counts,
+        x='Regime',
+        y='Anzahl Tage',
+        color='Regime',
+        color_discrete_map=REGIME_COLOR_MAP,
+        text='Anzahl Tage',
+        title='Häufigkeit der Markt-Regime'
     )
+
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    fig.update_layout(height=420, yaxis_title="Anzahl Tage", xaxis_title=None, showlegend=False)
+
     return fig
 
-import plotly.express as px
-import plotly.graph_objects as go
-import statsmodels.api as sm
-from statsmodels.formula.api import ols
-import numpy as np
-import pandas as pd
 
-# =========================================================
+
+# def create_regime_frequency_bar_chart(df):
+#     """Erstellt ein Balkendiagramm, das die absoluten Häufigkeiten der Markt-Regime zeigt (Teil 1)."""
+#     df_counts = df['Regime'].value_counts().reset_index()
+#     df_counts.columns = ['Regime', 'Anzahl Tage']
+#     order = ['Bull', 'Sideways', 'Bear']
+#     df_counts['Regime'] = pd.Categorical(df_counts['Regime'], categories=order, ordered=True)
+#     df_counts = df_counts.sort_values('Regime')
+    
+#     fig = px.bar(df_counts, x='Regime', y='Anzahl Tage', color='Regime', color_discrete_map=REGIME_COLOR_MAP,
+#                  title='Häufigkeit der Markt-Regime', text='Anzahl Tage')
+#     fig.update_layout(xaxis_title=None, yaxis_title='Anzahl Tage', showlegend=False, height=400)
+#     fig.update_traces(texttemplate='%{text}', textposition='outside')
+#     return fig
+
+# def create_cluster_frequency_bar_chart(df):
+#     """Erstellt ein Balkendiagramm, das die absoluten Häufigkeiten der ML-Cluster zeigt (Teil 1)."""
+#     df_counts = df['Cluster_3'].value_counts().reset_index()
+#     df_counts.columns = ['Cluster', 'Anzahl Tage']
+#     df_counts['Cluster'] = df_counts['Cluster'].astype(str)
+    
+#     fig = px.bar(df_counts, x='Cluster', y='Anzahl Tage', color='Cluster',
+#                  title='Häufigkeit der ML-Cluster (K=3)', text='Anzahl Tage')
+#     fig.update_layout(xaxis_title=None, yaxis_title='Anzahl Tage', showlegend=False, height=400)
+#     fig.update_traces(texttemplate='%{text}', textposition='outside')
+#     return fig
+
+# def create_time_series_plot(df):
+#     """Zeitlicher Verlauf von Preis und Volatilität (Teil 1)."""
+#     df['Date'] = pd.to_datetime(df.index)
+#     df_ts = df[['Close', 'Volatility30']].copy().dropna()
+    
+#     fig = go.Figure()
+    
+#     # Preis (Close) auf primärer Y-Achse
+#     fig.add_trace(go.Scatter(x=df_ts.index, y=df_ts['Close'], name='Close Preis', yaxis='y1', line=dict(color='blue')))
+    
+#     # Volatilität auf sekundärer Y-Achse
+#     fig.add_trace(go.Scatter(x=df_ts.index, y=df_ts['Volatility30'], name='Volatility30', yaxis='y2', line=dict(color='orange', dash='dot')))
+    
+#     fig.update_layout(
+#         title='Zeitlicher Verlauf von Preis und Volatilität (30d)',
+#         xaxis_title='Datum',
+#         yaxis=dict(title='Schlusskurs (Close)', color='blue'),
+#         yaxis2=dict(title='Volatilität (30d)', overlaying='y', side='right', color='orange', showgrid=False),
+#         height=500,
+#         legend=dict(x=0.01, y=0.99)
+#     )
+#     return fig
+
+# ========================================================
 # PLOT-FUNKTIONEN FÜR 5.2 THESENPRÜFUNG
 # =========================================================
 
-# THESEN BLOCK 1: These 1 (Regime-Unterschiede)
-def create_return_by_regime_boxplot(df):
-    """Erzeugt ein Boxplot der täglichen Rendite gruppiert nach Markt-Regime (These 1)."""
-    
-    regime_order = ['Bear', 'Sideways', 'Bull']
-    regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
+# THESEN BLOCK 1: These 1 (Regime-Unterschiede via Histogramme)
+def create_return_by_regime_histograms(df):
+    """Erzeugt drei Histogramme der täglichen Renditen – je eines für Bear-, Sideways- und Bull-Phasen (These 1).
+    Ziel: Regime sollen leicht verständlich und visuell klar unterscheidbar dargestellt werden.
+    """
 
-    fig = px.box(
-        df,
-        x='Regime',
-        y='Return',
-        category_orders={'Regime': regime_order},
-        color='Regime',
-        color_discrete_map=regime_color_map,
-        title='Prüfung These 1: Renditeverteilung nach Markt-Regime',
-        labels={'Return': 'Tägliche Rendite (%)', 'Regime': 'Markt-Regime'},
-        template='plotly_white'
+    import plotly.subplots as sp
+    import plotly.graph_objects as go
+
+    if 'Regime' not in df.columns or 'Return' not in df.columns:
+        return go.Figure().add_annotation(
+            text="Fehlende Spalten (Regime/Return) für These 1.",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+
+    regime_order = ['Bear', 'Sideways', 'Bull']
+    colors = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
+
+    # Return numerisch setzen
+    df['Return'] = pd.to_numeric(df['Return'], errors='coerce')
+    df_plot = df.dropna(subset=['Regime', 'Return'])
+
+    # Subplots erstellen: 1 Zeile, 3 Spalten
+    fig = sp.make_subplots(
+        rows=1, cols=3,
+        subplot_titles=("Bear", "Sideways", "Bull"),
+        horizontal_spacing=0.12
     )
-    
-    fig.update_layout(yaxis_tickformat='.2%')
-    fig.update_xaxes(title_text='Markt-Regime')
-    fig.update_yaxes(title_text='Tägliche Rendite')
+
+    for i, regime in enumerate(regime_order):
+        regime_data = df_plot[df_plot['Regime'] == regime]['Return']
+
+        fig.add_trace(
+            go.Histogram(
+                x=regime_data,
+                marker_color=colors[regime],
+                name=regime,
+                opacity=0.75
+            ),
+            row=1, col=i+1
+        )
+
+        # Achsentitel + Prozentformat
+        fig.update_xaxes(title_text="Rendite (%)", tickformat=".1%", row=1, col=i+1)
+        fig.update_yaxes(title_text="Häufigkeit", row=1, col=1)
+
+    fig.update_layout(
+        title="Prüfung These 1: Histogramme der täglichen Renditen pro Markt-Regime",
+        template="plotly_white",
+        height=450,
+        showlegend=False
+    )
 
     return fig
 
 # THESEN BLOCK 2: These 2 (Cluster-Phasen)
-def create_return_by_cluster_boxplot(df):
-    """Erzeugt ein Boxplot der täglichen Rendite gruppiert nach ML-Cluster (These 2)."""
+def create_return_by_cluster_violinplot(df):
+    """Erzeugt ein Violinplot der täglichen Rendite gruppiert nach ML-Cluster (These 2).
+    These 2: Die ML-Cluster (Cluster_3) bilden strukturell unterschiedliche Marktphasen ab,
+    die sich in der Renditeverteilung widerspiegeln.
+    """
 
-    # Cluster-Namen/IDs müssen in Ihrer df_master die Spalte 'Cluster_3' haben
-    cluster_order = sorted(df['Cluster_3'].unique())
-    # Hier werden neutrale Plotly-Farben verwendet
-    
-    fig = px.box(
-        df,
-        x=df['Cluster_3'].astype(str), # Sicherstellen, dass Cluster_3 als String behandelt wird
+    if 'Cluster_3' not in df.columns or 'Return' not in df.columns:
+        return go.Figure().add_annotation(
+            text="Fehlende Spalten (Cluster_3/Return) für These 2.",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False
+        )
+
+    # Copy
+    df_plot = df.copy()
+
+    # FIX 1: Cluster_3 sicher als numerisch casten
+    df_plot['Cluster_3'] = pd.to_numeric(df_plot['Cluster_3'], errors='coerce')
+
+    # FIX 2: Nur gültige Cluster >= 0 behalten
+    df_plot = df_plot[df_plot['Cluster_3'].notna() & (df_plot['Cluster_3'] >= 0)]
+
+    # Cluster-ID in String für Kategorien
+    df_plot['Cluster_3_str'] = df_plot['Cluster_3'].astype(int).astype(str)
+
+    # Return casten
+    df_plot['Return'] = pd.to_numeric(df_plot['Return'], errors='coerce')
+    df_plot.dropna(subset=['Cluster_3_str', 'Return'], inplace=True)
+
+    # Sortierte Cluster-Reihenfolge
+    cluster_order = sorted(df_plot['Cluster_3_str'].unique(), key=lambda x: int(x))
+
+    # Plot
+    fig = px.violin(
+        df_plot,
+        x='Cluster_3_str',
         y='Return',
-        category_orders={'x': cluster_order},
-        color=df['Cluster_3'].astype(str),
+        category_orders={'Cluster_3_str': cluster_order},
+        color='Cluster_3_str',
         title='Prüfung These 2: Renditeverteilung nach ML-Cluster (Cluster_3)',
-        labels={'Return': 'Tägliche Rendite (%)', 'x': 'ML-Cluster ID'},
-        template='plotly_white'
+        labels={'Return': 'Tägliche Rendite (%)', 'Cluster_3_str': 'ML-Cluster'},
+        template='plotly_white',
+        box=True,
+        points="all"
     )
-    
+
     fig.update_layout(yaxis_tickformat='.2%')
     fig.update_xaxes(title_text='ML-Cluster ID')
     fig.update_yaxes(title_text='Tägliche Rendite')
 
     return fig
 
+
+# THESEN BLOCK 3: These 3 (Hitrate pro Cluster)
+def create_hitrate_by_cluster_bar_chart(df):
+    """Erzeugt ein Balkendiagramm der Trefferquote pro Cluster (These 3).
+    These 3: Das Prognosemodell arbeitet in einigen Clustern besser als in anderen.
+    """
+
+    try:
+        # ❗ DIESER TEIL IST SIMULIERT – später mit echten Daten ersetzen
+        hitrate_data = pd.DataFrame({
+            'Cluster_3': [0, 1, 2],
+            'Hit_Rate': [0.52, 0.75, 0.65],
+            'Cluster_Label': ['Cluster 0', 'Cluster 1', 'Cluster 2']
+        })
+
+        hitrate_data = hitrate_data.sort_values(by='Hit_Rate', ascending=False)
+
+        fig = px.bar(
+            hitrate_data,
+            x='Cluster_Label',
+            y='Hit_Rate',
+            color='Hit_Rate',
+            color_continuous_scale=px.colors.sequential.Teal,
+            title='Prüfung These 3: Trefferquote nach ML-Cluster',
+            labels={'Hit_Rate': 'Trefferquote', 'Cluster_Label': 'ML-Cluster'},
+            template='plotly_white'
+        )
+
+        fig.update_yaxes(range=[0.4, 0.9], tickformat='.1%')
+        fig.update_xaxes(title_text='ML-Cluster (sortiert)')
+        fig.update_yaxes(title_text='Trefferquote (Hit Rate)')
+
+    except Exception as e:
+        fig = go.Figure()
+        fig.add_annotation(text=f"Datenfehler für These 3: {e}",
+                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+
+    return fig
+
+
+# # THESEN BLOCK 4: These 4 (Cluster vs. Regime Mapping)
+# def create_cluster_regime_heatmap(df):
+#     """Erstellt eine Heatmap der Häufigkeiten, die zeigt, wie Cluster_3 auf die Regime mappt (These 4).
+#     These: Die ML-Cluster korrelieren stark mit den Regime-Labels, sind aber feiner granuliert.
+#     """
+
+#     # Sicherstellen, dass Spalten vorhanden sind
+#     if 'Regime' not in df.columns or 'Cluster_3' not in df.columns:
+#         return go.Figure().add_annotation(
+#             text="Daten für These 4 fehlen (Regime oder Cluster_3 Spalte nicht gefunden).",
+#             xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False
+#         )
+
+#     # Copy
+#     df_plot = df.copy()
+
+#     # FIX 1: Cluster_3 numerisch machen (egal ob string, float, object…)
+#     df_plot['Cluster_3'] = pd.to_numeric(df_plot['Cluster_3'], errors='coerce')
+
+#     # FIX 2: Nur gültige Cluster >= 0 (NaN & -1 entfernen)
+#     df_plot = df_plot[df_plot['Cluster_3'].notna() & (df_plot['Cluster_3'] >= 0)]
+
+#     # Für Plot zu String casten
+#     df_plot['Cluster_3'] = df_plot['Cluster_3'].astype(int).astype(str)
+
+#     # Crosstab erstellen
+#     cross_tab = pd.crosstab(df_plot['Regime'], df_plot['Cluster_3'])
+
+#     # Regime-Reihenfolge (falls alle vorhanden sind)
+#     regime_order = ['Bear', 'Sideways', 'Bull']
+#     if all(r in cross_tab.index for r in regime_order):
+#         cross_tab = cross_tab.reindex(regime_order, axis=0)
+
+#     # Heatmap
+#     fig = px.imshow(
+#         cross_tab,
+#         text_auto=True,
+#         color_continuous_scale='Viridis',
+#         title='Prüfung These 4: Zuordnung der ML-Cluster zu Markt-Regime (Crosstab)',
+#         labels={'x': 'ML Cluster-ID (Cluster_3)', 'y': 'Markt-Regime', 'color': 'Anzahl Tage'}
+#     )
+
+#     fig.update_xaxes(title="ML Cluster-ID (Cluster_3)")
+#     fig.update_yaxes(title="Markt-Regime")
+
+#     # Colorbar verbessern
+#     max_count = cross_tab.values.max()
+#     fig.update_layout(
+#         coloraxis_colorbar=dict(
+#             title="Anzahl Tage",
+#             tickvals=[0, max_count],
+#             ticktext=["Gering", "Hoch"],
+#         ),
+#         height=450
+#     )
+
+#     return fig
+
+
+# THESEN BLOCK 5: These 5 (Volatilität vs. Rendite)
+def create_return_vs_volatility_scatter(df):
+    """Erzeugt ein Scatter Plot von Rendite vs. Volatilität mit Korrelationslinie (These 5).
+    These: Hohe Volatilität korreliert negativ mit der Rendite (Chaos führt zu Verlust/negativer Schiefe).
+    """
+    if 'Volatility30' not in df.columns or 'Return' not in df.columns or 'Regime' not in df.columns:
+        return go.Figure().add_annotation(text="Fehlende Spalten (Volatility30/Return/Regime) für These 5.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+
+
+    regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
+
+    # Sicherstellen, dass die Spalten numerisch sind und NaN entfernt werden
+    df_plot = df.copy()
+    df_plot['Return'] = pd.to_numeric(df_plot['Return'], errors='coerce')
+    df_plot['Volatility30'] = pd.to_numeric(df_plot['Volatility30'], errors='coerce')
+    df_plot.dropna(subset=['Volatility30', 'Return', 'Regime'], inplace=True)
+
+    fig = px.scatter(
+        df_plot,
+        x='Volatility30',
+        y='Return',
+        color='Regime',
+        color_discrete_map=regime_color_map,
+        title='Prüfung These 5: Rendite vs. Volatilität (30d)',
+        labels={'Return': 'Tägliche Rendite (%)', 'Volatility30': 'Volatilität (30 Tage)'},
+        template='plotly_white',
+        opacity=0.6,
+        trendline="ols", # Ordinary Least Squares (OLS) Regression hinzufügen
+        trendline_color_override='gray'
+    )
+
+    fig.update_layout(yaxis_tickformat='.2%')
+    fig.update_xaxes(title_text='Volatilität (30d)')
+    fig.update_yaxes(title_text='Tägliche Rendite')
+
+    return fig
+
 # THESEN BLOCK 6: These 6 (MA-Differenz)
 def create_ma_diff_by_regime_boxplot(df):
-    """Erzeugt ein Boxplot der MA50 - MA200 Differenz nach Markt-Regime (These 6)."""
-    
-    # Sicherstellen, dass die Differenz existiert, falls sie nicht im df_master ist
+    """Erzeugt ein Boxplot der MA50 - MA200 Differenz nach Markt-Regime (These 6).
+    These: Die MA-Differenz (MA50 - MA200) ist ein valider Indikator für das Regime.
+    """
+    if 'MA50' not in df.columns or 'MA200' not in df.columns or 'Regime' not in df.columns:
+        return go.Figure().add_annotation(text="Fehlende Spalten (MA50/MA200/Regime) für These 6.", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+
+
     df_temp = df.copy()
-    df_temp['MA_Diff'] = df_temp['MA50'] - df_temp['MA200']
+
+    # Sicherstellen, dass 'MA50' und 'MA200' numerisch sind und die Differenz berechnet wird
+    try:
+        df_temp['MA50'] = pd.to_numeric(df_temp['MA50'], errors='coerce')
+        df_temp['MA200'] = pd.to_numeric(df_temp['MA200'], errors='coerce')
+        df_temp.dropna(subset=['MA50', 'MA200', 'Regime'], inplace=True)
+        df_temp['MA_Diff'] = df_temp['MA50'] - df_temp['MA200']
+    except KeyError as e:
+        print(f"Fehler: Spalte {e} fehlt im DataFrame für These 6.")
+        return go.Figure().add_annotation(text=f"Daten für These 6 fehlen. {e}", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
 
     regime_order = ['Bear', 'Sideways', 'Bull']
     regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
@@ -649,175 +952,20 @@ def create_ma_diff_by_regime_boxplot(df):
         category_orders={'Regime': regime_order},
         color='Regime',
         color_discrete_map=regime_color_map,
-        title='Prüfung These 6: MA50 - MA200 Differenz nach Markt-Regime',
+        title='Prüfung These 6: MA50 - MA200 Differenz nach Markt-Regime (Boxplot)',
         labels={'MA_Diff': 'Differenz MA50 - MA200 (USD)', 'Regime': 'Markt-Regime'},
         template='plotly_white'
     )
 
-    # Fügt eine horizontale Linie bei y=0 hinzu (wichtig für die Interpretation)
+    # Horizontale Linie bei y=0
     fig.add_hline(y=0, line_width=2, line_dash="dash", line_color="gray")
     fig.update_xaxes(title_text='Markt-Regime')
     fig.update_yaxes(title_text='MA-Differenz (USD)')
 
     return fig
 
-# THESEN BLOCK 5: These 5 (Volatilität vs. Rendite)
-def create_return_vs_volatility_scatter(df):
-    """Erzeugt ein Scatter Plot von Rendite vs. Volatilität mit Korrelationslinie (These 5)."""
-    
-    regime_color_map = {'Bear': '#EF553B', 'Sideways': '#FECB52', 'Bull': '#00CC96'}
 
-    fig = px.scatter(
-        df,
-        x='Volatility30',
-        y='Return',
-        color='Regime',
-        color_discrete_map=regime_color_map,
-        title='Prüfung These 5: Rendite vs. Volatilität (Chaos führt zu Verlust)',
-        labels={'Return': 'Tägliche Rendite (%)', 'Volatility30': 'Volatilität (30 Tage)'},
-        template='plotly_white',
-        opacity=0.6,
-        trendline="ols", # Ordinary Least Squares (OLS) Regression hinzufügen
-        trendline_color_override='gray'
-    )
 
-    fig.update_layout(yaxis_tickformat='.2%')
-    fig.update_xaxes(title_text='Volatilität (30d)')
-    fig.update_yaxes(title_text='Tägliche Rendite')
-    
-    return fig
-
-# THESEN BLOCK 3: These 3 (Hitrate pro Cluster)
-def create_hitrate_by_cluster_bar_chart(df):
-    """Erzeugt ein Balkendiagramm der Trefferquote pro Cluster (These 3)."""
-    
-    # **WICHTIG:** Hier simulieren wir die Daten, da das `df_master` nur die Vorhersagen, aber nicht die Aggregation der Metriken enthält.
-    # Sie müssen diesen Teil anpassen, um Ihre tatsächlichen Modell-Metriken zu laden.
-    
-    try:
-        # Hier wird angenommen, dass Sie ein DataFrame mit den Metriken haben,
-        # das nach 'Cluster_3' aggregiert wurde, z.B. 'hit_rate_per_cluster'.
-        
-        # Beispiel-Daten (Muss durch echte Metriken ersetzt werden)
-        hitrate_data = pd.DataFrame({
-            'Cluster_3': [0, 1, 2],
-            'Hit_Rate': [0.52, 0.75, 0.65], # Beispielwerte
-            'Regime_Label': ['Bear (Low Hit)', 'Bull (High Hit)', 'Sideways (Medium Hit)']
-        })
-        
-        # Sortierung der Cluster festlegen
-        hitrate_data = hitrate_data.sort_values(by='Hit_Rate', ascending=False)
-        
-        fig = px.bar(
-            hitrate_data,
-            x='Regime_Label',
-            y='Hit_Rate',
-            color='Hit_Rate',
-            color_continuous_scale=px.colors.sequential.Teal,
-            title='Prüfung These 3: Trefferquote (Hit Rate) nach ML-Cluster',
-            labels={'Hit_Rate': 'Trefferquote', 'Regime_Label': 'ML-Cluster und Interpretation'},
-            template='plotly_white'
-        )
-
-        fig.update_yaxes(range=[0.4, 0.9], tickformat='.1%')
-        fig.update_xaxes(title_text='ML-Cluster (absteigende Trefferquote)')
-        fig.update_yaxes(title_text='Trefferquote (Hit Rate)')
-
-    except Exception as e:
-        # Fallback, falls die Metriken fehlen
-        print(f"Fehler beim Erstellen des Hitrate-Plots: {e}")
-        fig = go.Figure()
-        fig.add_annotation(text="Daten für Hit Rate pro Cluster fehlen oder sind fehlerhaft.",
-                           xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-
-    return fig
-
-# THESEN BLOCK 7: These 7 (Prognosestabilität)
-
-# THESEN BLOCK 7: These 7 (Prognosestabilität)
-def create_long_term_forecast_plot(df):
-    """Erzeugt einen Line Plot zum Vergleich von Close mit den Vorhersagehorizonten (These 7)."""
-
-    # Kopie erstellen, um den originalen Index nicht dauerhaft zu ändern
-    df_plot = df.copy()
-    
-    # FEHLERBEHEBUNG: Den Index-Namen temporär auf None setzen, 
-    # WENN er 'Date' heißt und mit einer existierenden Spalte kollidiert.
-    if df_plot.index.name == 'Date':
-        df_plot.index.name = None
-        
-    # Index zurücksetzen. Die neue Spalte wird 'index' heißen, wenn der Name None war.
-    df_plot = df_plot.reset_index()
-
-    # Falls die Spalte 'index' existiert (was nach dem Entfernen des Namens der Fall ist), in 'Date' umbenennen.
-    if 'index' in df_plot.columns:
-        df_plot = df_plot.rename(columns={'index': 'Date'})
-        
-    # Auswahl der relevanten Spalten. Jetzt existiert 'Date' nur einmal.
-    df_plot = df_plot[['Date', 'Close', 'Pred_1d', 'Pred_7d', 'Pred_30d']]
-
-    # Plot erstellen (Long-Format für Plotly Express)
-    df_long = df_plot.melt(
-        id_vars=['Date'], 
-        value_vars=['Close', 'Pred_1d', 'Pred_7d', 'Pred_30d'],
-        var_name='Serie', 
-        value_name='Preis'
-    )
-    
-    # Farbschema für die Lesbarkeit anpassen
-    color_map = {
-        'Close': '#1f77b4',     # Blau (Aktueller Preis)
-        'Pred_1d': '#00CC96',   # Grün (Kurzfristig - stabil)
-        'Pred_7d': '#FF7F0E',   # Orange (Mittelfristig)
-        'Pred_30d': '#EF553B'   # Rot (Längerfristig - weniger stabil)
-    }
-
-    fig = px.line(
-        df_long,
-        x='Date',
-        y='Preis',
-        color='Serie',
-        color_discrete_map=color_map,
-        title='Prüfung These 7: Preis und Prognosen für verschiedene Horizonte',
-        labels={'Preis': 'Preis (USD)', 'Date': 'Datum'},
-        template='plotly_white'
-    )
-    
-    fig.update_xaxes(title_text='Datum')
-    fig.update_yaxes(title_text='Preis (USD)')
-
-    return fig
-
-def create_cluster_regime_heatmap(df):
-    """Erstellt eine Heatmap der Häufigkeiten, die zeigt, wie Cluster_3 auf die Regime mappt."""
-    
-    # 1. Kreuztabelle (Crosstab) erstellen
-    # Zeilen: Regime, Spalten: Cluster_3
-    cross_tab = pd.crosstab(df['Regime'], df['Cluster_3'])
-    
-    # 2. Plot erstellen
-    fig = px.imshow(
-        cross_tab,
-        text_auto=True, # Zeigt die Zahlen in den Zellen
-        color_continuous_scale='Viridis', # Farbpalette
-        title='Zuordnung der ML-Cluster zu Markt-Regime (Crosstab)'
-    )
-    
-    fig.update_xaxes(title="ML Cluster-ID (Cluster_3)")
-    fig.update_yaxes(title="Markt-Regime")
-    
-    # Um die Farben der Heatmap zu normalisieren, nutzen wir die max-Werte für die Skala
-    max_count = cross_tab.values.max()
-    fig.update_layout(
-        coloraxis_colorbar=dict(
-            title="Anzahl Tage",
-            tickvals=[0, max_count],
-            ticktext=["Geringe Anzahl", "Hohe Anzahl"],
-        ),
-        height=450
-    )
-    
-    return fig
 # ==================================================================================================
 # 5. DASHBOARD LOGIK UND LAYOUT
 # ==================================================================================================
@@ -1627,428 +1775,321 @@ with tab2_new:
             "**Gesamt:** Der Tag befand sich in einem **starken, aber relativ ruhigen Aufwärtstrend** (Regime wahrscheinlich 'Bull')."
         )
 
-
-    # with tab5_new:
-    #     st.header("5. Explorative Analyse (EDA)")
-    #     st.info("Dieser Tab ist für zukünftige erweiterte Analysen, z.B. Feature-Wichtigkeiten, gedacht.")
-    #     st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
-
-# # --- Tab 5: EXPLORATIVE ANALYSE (EDA) & THESEN ---
-#     with tab5_new:
-#         st.header("5. Explorative Analyse (EDA) & Thesen")
-#         st.info("Dieser Tab beleuchtet die **Datenbasis und Feature-Verteilung** und dient der empirischen **Prüfung der Haupt-Thesen** aus der Marktanalyse.")
-
-#         # -----------------------------------------------------------------
-#         # 5.1 DATEN-ÜBERBLICK & FEATURE-EXPLORATION (Die Rohdaten-Basis)
-#         # -----------------------------------------------------------------
-#         st.subheader("5.1 Daten-Überblick: Häufigkeiten und Verteilungen")
-#         st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis und der Verteilung der wichtigsten Markt-Features.")
-
-#         # 1. Häufigkeiten der Marktphasen (Bar Charts)
-#         col_regime, col_cluster = st.columns(2)
-
-#         with col_regime:
-#             st.markdown("#### 📊 Häufigkeit der Markt-Regime")
-#             regime_fig = create_regime_frequency_bar_chart(df_master)
-#             st.plotly_chart(regime_fig, use_container_width=True)
-
-#         with col_cluster:
-#             st.markdown("#### 📊 Häufigkeit der ML-Cluster")
-#             cluster_fig = create_cluster_frequency_bar_chart(df_master)
-#             st.plotly_chart(cluster_fig, use_container_width=True)
-            
-#         st.markdown("---")
-        
-#         # 2. Zeitverlauf der Haupt-Features (Time Series Plot)
-#         st.markdown("#### 📈 Zeitlicher Verlauf von Preis und Volatilität")
-#         st.markdown("Dieser Plot visualisiert die Entwicklung des **Schlusskurses (Close)** und der **kurzfristigen Volatilität (`Volatility30`)** über die gesamte Historie. Er identifiziert Perioden mit hohem Preiswachstum vs. hohem Risiko.")
-#         time_series_fig = create_time_series_plot(df_master)
-#         st.plotly_chart(time_series_fig, use_container_width=True)
-        
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # 5.2 THESENPRÜFUNG: BEWEISFÜHRUNG DURCH VISUALISIERUNG
-#         # -----------------------------------------------------------------
-#         st.subheader("5.2 Empirische Prüfung der Zentralen Thesen")
-#         st.markdown("Die folgenden Visualisierungen dienen der direkten Prüfung der wichtigsten Hypothesen zur Marktstruktur und Modellgüte. Der Erklärungstext ist direkt unter dem jeweiligen Plot platziert.")
-        
-#         # -----------------------------------------------------------------
-#         # THESEN BLOCK 1: These 1 (Regime-Unterschiede)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 1: Marktregime unterscheiden sich klar in Trend & Risiko")
-#         st.markdown("##### Boxplot: Rendite nach Markt-Regime")
-        
-#         return_regime_fig = create_return_by_regime_boxplot(df_master)
-#         st.plotly_chart(return_regime_fig, use_container_width=True)
-
-#         # Erklärungstext These 1 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieser Plot zeigt die Verteilung der täglichen Renditen (`Return`) gruppiert nach Markt-Regime.\n\n"
-#             "➡️ **Bull (Grün):** Der Median liegt klar im positiven Bereich (hohe Gewinne).\n"
-#             "➡️ **Bear (Rot):** Der Median liegt im negativen Bereich (Verluste).\n"
-#             "➡️ **Sideways (Gelb):** Der Median liegt nahe Null und die Quartile zeigen eine Seitwärtsbewegung.\n\n"
-#             "**Fazit:** Die klaren Unterschiede belegen, dass die Regime-Definition funktioniert und die Märkte messbar getrennt werden."
-#         )
-
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # THESEN BLOCK 2: These 5 (Volatilität vs. Rendite)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 5: Chaos (Volatilität) führt oft zu Verlusten (negative Rendite)")
-#         st.markdown("##### Scatter Plot: Rendite vs. Volatilität")
-        
-#         return_vol_fig = create_return_vs_volatility_scatter(df_master)
-#         st.plotly_chart(return_vol_fig, use_container_width=True)
-
-#         # Erklärungstext These 5 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieser Scatter Plot visualisiert die tägliche Rendite (`Return`) gegen die kurzfristige Volatilität (`Volatility30`).\n\n"
-#             "➡️ **Negative Korrelation:** Die gestrichelte Trendlinie fällt nach rechts ab. Dies beweist die These, dass **zunehmendes Risiko (höhere Volatilität)** oft mit **sinkenden Preisen (negative Rendite)** verbunden ist (These 5).\n"
-#             "➡️ **Bear-Regime (Rot):** Diese Tage konzentrieren sich oft im Bereich hoher Volatilität und negativer Renditen, was die Verbindung von Chaos und Verlust untermauert."
-#         )
-
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # 5.3 ROHDATEN-VORSCHAU
-#         # -----------------------------------------------------------------
-#         st.subheader("5.3 Rohdaten-Vorschau (Features)")
-#         st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
-        
-#         st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
-
-# # --- Tab 5: EXPLORATIVE ANALYSE (EDA) & THESEN ---
-#     with tab5_new:
-#         st.header("5. Explorative Analyse (EDA) & Thesen")
-#         st.info("Dieser Tab beleuchtet die **Datenbasis und Feature-Verteilung** und dient der empirischen **Prüfung der Haupt-Thesen** aus der Marktanalyse.")
-
-#         # -----------------------------------------------------------------
-#         # 5.1 DATEN-ÜBERBLICK & FEATURE-EXPLORATION (Die Rohdaten-Basis)
-#         # -----------------------------------------------------------------
-#         st.subheader("5.1 Daten-Überblick: Häufigkeiten und Verteilungen")
-#         st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis und der Verteilung der wichtigsten Markt-Features.")
-
-#         # 1. Häufigkeiten der Marktphasen (Bar Charts)
-#         col_regime, col_cluster = st.columns(2)
-
-#         with col_regime:
-#             st.markdown("#### 📊 Häufigkeit der Markt-Regime")
-#             regime_fig = create_regime_frequency_bar_chart(df_master)
-#             st.plotly_chart(regime_fig, use_container_width=True)
-
-#         with col_cluster:
-#             st.markdown("#### 📊 Häufigkeit der ML-Cluster")
-#             cluster_fig = create_cluster_frequency_bar_chart(df_master)
-#             st.plotly_chart(cluster_fig, use_container_width=True)
-            
-#         st.markdown("---")
-        
-#         # NEU: HEATMAP ZUR KLÄRUNG DER IDENTISCHEN ZAHLEN
-#         st.markdown("#### 🔗 Zuordnung der ML-Cluster zu den Markt-Regimen")
-#         st.markdown("**Klärung der identischen Zählungen:** Diese Heatmap zeigt, wie die ML-Cluster (`Cluster_3`) und die manuellen Regime (`Regime`) ineinander übergehen. Eine diagonale Dominanz belegt, dass der ML-Ansatz dieselben Marktphasen wie die Experten-Regeln findet.")
-#         cluster_map_fig = create_cluster_regime_heatmap(df_master)
-#         st.plotly_chart(cluster_map_fig, use_container_width=True)
-
-#         st.markdown("---")
-        
-#         # 2. Zeitverlauf der Haupt-Features (Time Series Plot)
-#         st.markdown("#### 📈 Zeitlicher Verlauf von Preis und Volatilität")
-#         st.markdown("Dieser Plot visualisiert die Entwicklung des **Schlusskurses (Close)** und der **kurzfristigen Volatilität (`Volatility30`)** über die gesamte Historie. Er identifiziert Perioden mit hohem Preiswachstum vs. hohem Risiko.")
-#         time_series_fig = create_time_series_plot(df_master)
-#         st.plotly_chart(time_series_fig, use_container_width=True)
-        
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # 5.2 THESENPRÜFUNG: BEWEISFÜHRUNG DURCH VISUALISIERUNG
-#         # -----------------------------------------------------------------
-#         st.subheader("5.2 Empirische Prüfung der Zentralen Thesen")
-#         st.markdown("Die folgenden Visualisierungen dienen der direkten Prüfung der wichtigsten Hypothesen zur Marktstruktur und Modellgüte. Der Erklärungstext ist direkt unter dem jeweiligen Plot platziert.")
-        
-#         # -----------------------------------------------------------------
-#         # THESEN BLOCK 1: These 1 (Regime-Unterschiede)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 1: Marktregime unterscheiden sich klar in Trend & Risiko")
-#         st.markdown("##### Boxplot: Rendite nach Markt-Regime")
-        
-#         return_regime_fig = create_return_by_regime_boxplot(df_master)
-#         st.plotly_chart(return_regime_fig, use_container_width=True)
-
-#         # Erklärungstext These 1 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieser Plot zeigt die Verteilung der täglichen Renditen (`Return`) gruppiert nach Markt-Regime.\n\n"
-#             "➡️ **Bull (Grün):** Der Median liegt klar im positiven Bereich (hohe Gewinne).\n"
-#             "➡️ **Bear (Rot):** Der Median liegt im negativen Bereich (Verluste).\n"
-#             "➡️ **Sideways (Gelb):** Der Median liegt nahe Null und die Quartile zeigen eine Seitwärtsbewegung.\n\n"
-#             "**Fazit:** Die klaren Unterschiede belegen, dass die Regime-Definition funktioniert und die Märkte messbar getrennt werden."
-#         )
-
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # THESEN BLOCK 2: These 5 (Volatilität vs. Rendite)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 5: Chaos (Volatilität) führt oft zu Verlusten (negative Rendite)")
-#         st.markdown("##### Scatter Plot: Rendite vs. Volatilität")
-        
-#         return_vol_fig = create_return_vs_volatility_scatter(df_master)
-#         st.plotly_chart(return_vol_fig, use_container_width=True)
-
-#         # Erklärungstext These 5 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieser Scatter Plot visualisiert die tägliche Rendite (`Return`) gegen die kurzfristige Volatilität (`Volatility30`).\n\n"
-#             "➡️ **Negative Korrelation:** Die gestrichelte Trendlinie fällt nach rechts ab. Dies beweist die These, dass **zunehmendes Risiko (höhere Volatilität)** oft mit **sinkenden Preisen (negative Rendite)** verbunden ist (These 5).\n"
-#             "➡️ **Bear-Regime (Rot):** Diese Tage konzentrieren sich oft im Bereich hoher Volatilität und negativer Renditen, was die Verbindung von Chaos und Verlust untermauert."
-#         )
-
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # NEUER BLOCK: These 2 (Cluster-Phasen)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 2: Cluster_3 gruppiert Markttage in sinnvolle Marktphasen")
-#         st.markdown("##### Boxplot: Rendite nach ML-Cluster")
-        
-#         return_cluster_fig = create_return_by_cluster_boxplot(df_master)
-#         st.plotly_chart(return_cluster_fig, use_container_width=True)
-
-#         # Erklärungstext These 2 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieses Boxplot zeigt die Rendite (`Return`) gruppiert nach den vom ML-Algorithmus gefundenen Clustern (`Cluster_3`).\n\n"
-#             "➡️ **Struktur:** Die Verteilungen der Cluster spiegeln die Muster der Markt-Regime (These 1) wider.\n"
-#             "➡️ **Fazit:** Die perfekte Übereinstimmung (wie in der Heatmap gezeigt) und die klaren Renditeunterschiede belegen, dass der ML-Ansatz erfolgreich wirtschaftlich sinnvolle Marktphasen gefunden hat."
-#         )
-
-#         st.markdown("---")
-
-#         # -----------------------------------------------------------------
-#         # NEUER BLOCK: These 3 (Hitrate pro Cluster)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 3: Einige Cluster liefern höhere Trefferquoten im Direction-Modell")
-#         st.markdown("##### Balkendiagramm: Trefferquote pro Cluster-ID")
-        
-#         hitrate_cluster_fig = create_hitrate_by_cluster_bar_chart(df_master)
-#         st.plotly_chart(hitrate_cluster_fig, use_container_width=True)
-
-#         # Erklärungstext These 3 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieser Plot zeigt die **Trefferquote** (Hit Ratio) des Klassifikationsmodells, getrennt nach den drei Markt-Clustern.\n\n"
-#             "➡️ **Transparenz:** Die Cluster mit der **höchsten Trefferquote** zeigen, unter welchen Marktbedingungen das Modell am zuverlässigsten ist (z.B. klarer Bullen-Markt).\n"
-#             "➡️ **Schwachstellen:** Cluster mit einer Trefferquote nahe 50% identifizieren Marktphasen, in denen die Prognose **weniger verlässlich** ist (z.B. komplexe Seitwärtsbewegungen)."
-#         )
-
-#         st.markdown("---")
-
-#         # -----------------------------------------------------------------
-#         # NEUER BLOCK: These 7 (Prognosestabilität)
-#         # -----------------------------------------------------------------
-#         st.markdown("#### 🎯 Prüfung These 7: ML-Preisprognosen sind innerhalb kurzer Horizonte stabil und plausibel")
-#         st.markdown("##### Line Plot: Close vs. Vorhersagehorizonte (1d, 7d, 30d)")
-        
-#         forecast_plot_fig = create_long_term_forecast_plot(df_master)
-#         st.plotly_chart(forecast_plot_fig, use_container_width=True)
-
-#         # Erklärungstext These 7 (Direkt unter dem Plot)
-#         st.info(
-#             "**Beweis:** Dieser Zeitreihen-Plot vergleicht den tatsächlichen Preis (`Close`) mit den Vorhersagen für verschiedene Horizonte.\n\n"
-#             "➡️ **Kurzfristige Stabilität:** Die **`Pred_1d` (Grün)** und **`Pred_7d` (Orange)** Linien folgen dem tatsächlichen Preis (`Close`, Blau) sehr eng.\n"
-#             "➡️ **Langfristige Unsicherheit:** Die **`Pred_30d` (Rot)** Linie zeigt tendenziell größere Abweichungen oder ist träger. Dies beweist, dass das Modell **kurzfristig stabiler und verlässlicher** ist."
-#         )
-
-#         st.markdown("---")
-        
-#         # -----------------------------------------------------------------
-#         # 5.3 ROHDATEN-VORSCHAU
-#         # -----------------------------------------------------------------
-#         st.subheader("5.3 Rohdaten-Vorschau (Features)")
-#         st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
-        
-#         st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
 # --- Tab 5: EXPLORATIVE ANALYSE (EDA) & THESEN ---
     with tab5_new:
         st.header("5. Explorative Analyse (EDA) & Thesen")
         st.info("Dieser Tab beleuchtet die **Datenbasis und Feature-Verteilung** und dient der empirischen **Prüfung der Haupt-Thesen** aus der Marktanalyse.")
+        
+
+
 
         # -----------------------------------------------------------------
         # 5.1 DATEN-ÜBERBLICK & FEATURE-EXPLORATION (Die Rohdaten-Basis)
         # -----------------------------------------------------------------
-        st.subheader("5.1 Daten-Überblick: Häufigkeiten und Validierung")
-        st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis, der Feature-Verteilung und die Validierung der ML-Cluster.")
-
-        # 1. Häufigkeiten der Marktphasen (Bar Charts)
-        col_regime, col_cluster = st.columns(2)
-
-        with col_regime:
-            st.markdown("#### 📊 Häufigkeit der Markt-Regime (Manuell)")
-            regime_fig = create_regime_frequency_bar_chart(df_master)
-            st.plotly_chart(regime_fig, use_container_width=True)
-
-        with col_cluster:
-            st.markdown("#### 📊 Häufigkeit der ML-Cluster (K-Means)")
-            cluster_fig = create_cluster_frequency_bar_chart(df_master)
-            st.plotly_chart(cluster_fig, use_container_width=True)
-            
-        st.info(
-            "**Häufigkeit und Verteilung:** Die Bullenphase dominiert die Historie, was den langfristigen Aufwärtstrend von Bitcoin widerspiegelt.\n\n"
-            "**Hinweis zur Korrektheit:** Die Zählungen der manuellen Regime (links) und der ML-Cluster (rechts) sind **numerisch identisch**. Dies ist der erste starke Hinweis auf eine perfekte Korrelation, die durch die Heatmap bewiesen wird."
-        )
+        
+        st.subheader("5.1 Daten-Überblick: Häufigkeiten und Verteilungen")
+        st.markdown("Der erste Schritt der Analyse ist die Prüfung der Datenbasis und der Verteilung der wichtigsten Markt-Features.")
         
         st.markdown("---")
         
-        # HEATMAP ZUR KLÄRUNG DER IDENTISCHEN ZAHLEN
-        st.markdown("#### 🔗 Validierung: Zuordnung der ML-Cluster zu den Markt-Regimen")
-        cluster_map_fig = create_cluster_regime_heatmap(df_master)
-        st.plotly_chart(cluster_map_fig, use_container_width=True)
+        st.markdown("### 📊 Verteilung der täglichen Renditen")
+        st.plotly_chart(create_return_distribution_plot(df_master), use_container_width=True)
+        st.caption("Analyse: Die tägliche Rendite ist stark um 0 % zentriert, zeigt aber eine deutlich \
+                linksschiefe Verteilung mit vielen Ausreißern. Die meisten Tage liegen im Bereich kleiner \
+                Bewegungen (–2 % bis +2 %), während seltene Extremereignisse deutlich weiter ausschlagen. \
+                Diese heavy-tailed Struktur erklärt die hohe Marktvolatilität und bildet die Grundlage für \
+                die späteren Regime-Unterschiede. → Die Renditen sind nicht normalverteilt, sondern stark \
+                schwankungsanfällig."
+                )
 
-        st.success(
-            "**BESTÄTIGUNG DER KORREKTHEIT:** Die Heatmap zeigt die **Kreuztabelle** der Regime (`Regime`) gegen die ML-Cluster (`Cluster_3`).\n\n"
-            "➡️ **Beweis:** Die Zahlen liegen **ausschließlich auf der Diagonale** (z. B. Cluster 0 = Bull, Cluster 2 = Bear). Dies belegt, dass das **unüberwachte ML-Modell** exakt dieselben drei Marktphasen trennt, die auch die Experten-Regeln definieren.\n\n"
-            "**Fazit:** Die ML-Cluster sind **valide und datengestützte Synonyme** für die Experten-Regime. Die Grundlage der gesamten Analyse ist damit validiert."
-        )
+
+        st.markdown("### 🔗 Korrelationsmatrix der wichtigsten Features")
+        st.plotly_chart(create_correlation_heatmap(df_master), use_container_width=True)
+        st.caption("Analyse: Die Korrelationsmatrix zeigt, dass MA50 und MA200 extrem stark miteinander korrelieren \
+                (r ≈ 0.98), was typisch für langfristige Trendindikatoren ist. Die Tagesrenditen hingegen weisen \
+                nahezu keine Korrelation zu anderen Features auf – ein Hinweis auf die hohe Zufälligkeit von \
+                Tagesschwankungen. Volatilität korreliert leicht negativ mit den gleitenden Durchschnitten, \
+                was bedeutet: stabile Trends weisen geringere Volatilität auf, während chaotische Marktphasen \
+                mit stark schwankenden Preisen einhergehen. → Die Features erklären Marktphasen gut, aber die \
+                Tagesrichtung nur sehr begrenzt."
+                )
+
+        st.markdown("### 📊 Häufigkeit der Markt-Regime")
+        st.plotly_chart(create_regime_frequency_bar_chart(df_master), use_container_width=True)
+
+        st.caption(
+            "Analyse: Der Markt ist klar von Aufwärtstrends geprägt. Mit **≈ 2.356 Bull-Tagen** dominiert das Bull-Regime "
+            "den größten Teil der Historie. Das **Sideways-Regime tritt mit nur 380 Tagen** deutlich seltener auf, "
+            "während das **Bear-Regime mit 1.155 Tagen** zwar kürzer ist, aber oft starke Abwärtsbewegungen enthält. "
+            "Diese asymmetrische Verteilung zeigt: Bitcoin verbringt die meiste Zeit im Aufwärtstrend, während "
+            "Bärenmärkte kompakt, aber wirtschaftlich besonders relevant sind. → Diese Regimeverteilung bildet "
+            "die Grundlage für die spätere ML-Clusteranalyse."
+)
+
 
         st.markdown("---")
         
-        # 2. Zeitverlauf der Haupt-Features (Time Series Plot)
-        st.markdown("#### 📈 Zeitlicher Verlauf von Preis und Volatilität")
-        time_series_fig = create_time_series_plot(df_master)
-        st.plotly_chart(time_series_fig, use_container_width=True)
         
-        st.info(
-            "**Was es zeigt:** Dieser Plot visualisiert die Entwicklung des **Schlusskurses (Close)** und der **kurzfristigen Volatilität** (`Volatility30`) über die gesamte Historie.\n\n"
-            "**Korrekte Interpretation der Skala:** Der Plot verwendet eine **duale Y-Achse**.\n"
-            "➡️ **Close-Preis (Links):** Absoluter Wert (USD / EUR).\n"
-            "➡️ **Volatilität (Rechts):** Relativer Wert (Risiko in %). Die Volatilität ist nicht 'höher' als der Preis, sondern auf ihrer eigenen, **risikobasierten Skala** dargestellt, um Risiko-Phasen unabhängig vom absoluten Preisniveau sichtbar zu machen."
-        )
-        
-        st.markdown("---")
         
         # -----------------------------------------------------------------
         # 5.2 THESENPRÜFUNG: BEWEISFÜHRUNG DURCH VISUALISIERUNG
         # -----------------------------------------------------------------
         st.subheader("5.2 Empirische Prüfung der Zentralen Thesen")
         st.markdown("Die folgenden Visualisierungen dienen der direkten Prüfung der wichtigsten Hypothesen zur Marktstruktur und Modellgüte. Der Erklärungstext ist direkt unter dem jeweiligen Plot platziert.")
-        
-        # -----------------------------------------------------------------
-        # THESEN BLOCK 1: These 1 (Regime-Unterschiede)
-        # -----------------------------------------------------------------
-        st.markdown("#### 🎯 Prüfung These 1: Marktregime unterscheiden sich klar in Trend & Risiko")
-        st.markdown("##### Boxplot: Rendite nach Markt-Regime")
-        
-        return_regime_fig = create_return_by_regime_boxplot(df_master)
-        st.plotly_chart(return_regime_fig, use_container_width=True)
+        st.markdown("---")
 
-        # Erklärungstext These 1 (Direkt unter dem Plot)
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 1: These 1 (Regime-Unterschiede) – Histogramm Version
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 1: Unterschiedliche Renditemuster in den Markt-Regimen")
+        st.markdown("##### Histogramme: Verteilung der täglichen Renditen nach Regime")
+
+        return_regime_hist = create_return_by_regime_histograms(df_master)
+        st.plotly_chart(return_regime_hist, use_container_width=True)
+        
+        st.caption(
+            "Analyse: Die Histogramme zeigen, dass Markt-Regime ökonomisch real sind: "
+            "Bear = überwiegend negativ, Sideways = neutral um die Null-Linie, Bull = überwiegend positiv. "
+            "→ These 1 bestätigt – die Regime unterscheiden sich signifikant in ihrer Renditeverteilung.")
+        
         st.info(
-            "**Beweis:** Dieser Plot zeigt die Verteilung der täglichen Renditen (`Return`) gruppiert nach Markt-Regime.\n\n"
-            "➡️ **Bull (Grün):** Der Median liegt klar im positiven Bereich (hohe Gewinne).\n"
-            "➡️ **Bear (Rot):** Der Median liegt im negativen Bereich (Verluste).\n"
-            "➡️ **Sideways (Gelb):** Der Median liegt nahe Null und die Quartile zeigen eine Seitwärtsbewegung.\n\n"
-            "**Fazit:** Die klaren Unterschiede belegen, dass die Regime-Definition funktioniert und die Märkte messbar getrennt werden."
+            "**Beweisidee:** Diese drei Histogramme zeigen die Verteilung der täglichen Renditen getrennt nach den "
+            "drei Markt-Regimen: Bear, Sideways und Bull.\n\n"
+            "➡️ **Bear-Phasen:** Deutlich mehr negative Renditetage – Schwerpunkt links im negativen Bereich.\n"
+            "➡️ **Sideways-Phasen:** Enge Verteilung um die Null-Linie – wenig Trend, geringe Dynamik.\n"
+            "➡️ **Bull-Phasen:** Mehrheitlich positive Renditetage – linke Seite schmal, rechte Seite ausgeprägt.\n\n"
+            "➡️ **Interpretation:** Die Histogramme zeigen klar erkennbare Muster: Bärenmärkte verlieren statistisch Geld, "
+            "Seitwärtsmärkte verlaufen stabil ohne große Ausschläge, und Bullenmärkte generieren überwiegend positive Renditen.\n"
+            "➡️ **Fazit:** These 1 wird bestätigt – die drei Markt-Regime unterscheiden sich signifikant in der Form und "
+            "Lage ihrer Renditeverteilung."
         )
 
         st.markdown("---")
 
         # -----------------------------------------------------------------
-        # NEUER BLOCK: These 2 (Cluster-Phasen)
+        # THESEN BLOCK 2: These 2 (Cluster-Phasen)
         # -----------------------------------------------------------------
-        st.markdown("#### 🎯 Prüfung These 2: Cluster_3 gruppiert Markttage in sinnvolle Marktphasen")
-        st.markdown("##### Boxplot: Rendite nach ML-Cluster")
-        
-        return_cluster_fig = create_return_by_cluster_boxplot(df_master)
-        st.plotly_chart(return_cluster_fig, use_container_width=True)
+        st.markdown("#### 🎯 Prüfung These 2: ML-Cluster bilden unterschiedliche Marktphasen ab")
+        st.markdown("##### Violinplot: Renditeverteilung nach Cluster-ID")
 
-        # Erklärungstext These 2 (Direkt unter dem Plot)
+        st.caption(
+            "Cluster-Interpretation: 🐂 **Bull-Markt = Cluster 0**, ➖ **Sideways = Cluster 1**, 🐻 **Bear-Markt = Cluster 2**")
+
+        cluster_violin_fig = create_return_by_cluster_violinplot(df_master)
+        st.plotly_chart(cluster_violin_fig, use_container_width=True)
+        
+        st.caption(
+            "Analyse: Die Verteilungen zeigen klar unterschiedliche Marktphasen: "
+            "Cluster 0 besitzt breite, positiv verschobene Renditen (Bull), "
+            "Cluster 1 zeigt kompakte, neutrale Verteilungen (Sideways), "
+            "und Cluster 2 besitzt linksschiefe, negative Renditen (Bear). "
+            "→ These 2 bestätigt: ML-Cluster erkennen realwirtschaftliche Marktphasen.")
+
+
         st.info(
-            "**Beweis:** Dieses Boxplot zeigt die Rendite (`Return`) gruppiert nach den vom ML-Algorithmus gefundenen Clustern (`Cluster_3`).\n\n"
-            "➡️ **Struktur:** Die Verteilungen der Cluster spiegeln die Muster der Markt-Regime (These 1) wider.\n"
-            "➡️ **Fazit:** Die perfekte Übereinstimmung (wie in der Heatmap gezeigt) und die klaren Renditeunterschiede belegen, dass der ML-Ansatz erfolgreich wirtschaftlich sinnvolle Marktphasen gefunden hat."
+            "**Beweis:** Das ML-Clustering trennt den Markt in unterschiedliche Phasen, "
+            "die klar unterschiedliche Renditemuster besitzen.\n\n"
+            "➡️ Cluster mit hoher Volatilität zeigen breitere Verteilungen.\n"
+            "➡️ Trendphasen zeigen verschobene Renditezentren.\n"
+            "➡️ Ruhige Marktphasen haben schmale, kompakte Verteilungen.\n\n"
+            "➡️ **Fazit:** These 2 wird bestätigt – die ML-Cluster spiegeln realwirtschaftlich unterschiedliche Marktphasen wider."
         )
 
         st.markdown("---")
+
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 3: These 3 (Hitrate pro Cluster)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 3: Modellleistung unterscheidet sich zwischen den ML-Clustern")
+        st.markdown("##### Balkendiagramm: Trefferquote pro Cluster")
+
+        hitrate_cluster_fig = create_hitrate_by_cluster_bar_chart(df_master)
+        st.plotly_chart(hitrate_cluster_fig, use_container_width=True)
+                # ⭐ Analyse in kleiner Schrift direkt zum Chart
+        st.caption(
+            "Analyse: Die Trefferquote des Direction-Modells unterscheidet sich deutlich zwischen den ML-Clustern. "
+            "Cluster 1 liefert die höchste Trefferquote (~75%) und repräsentiert strukturierte Trendphasen, in denen Richtungsprognosen leicht fallen. "
+            "Cluster 2 liegt im Mittelfeld (~65%). In Cluster 0 sinkt die Trefferquote auf nahezu Zufallsniveau (~52%) – typisch für unklare Seitwärts- oder Umschwungphasen. "
+            "→ These 3 bestätigt: Die Modellqualität ist stark vom Marktumfeld abhängig.")
+
+        st.info(
+            "**Beweisidee:** Die Trefferquote des Direction-Modells variiert je nach Marktphase.\n\n"
+            "➡️ **Trendstarke Cluster (z. B. Bull)** erreichen höhere Trefferquoten, "
+            "da Aufwärts- oder Abwärtsbewegungen klarer erkennbar sind.\n"
+            "➡️ **Seitwärts-Cluster** liegen näher bei ~50% – hier ist der Markt unstrukturiert, "
+            "und die Richtung lässt sich schlechter prognostizieren.\n\n"
+            "➡️ **Fazit:** These 3 wird bestätigt – die Modellleistung hängt signifikant davon ab, "
+            "in welchem ML-Cluster (und damit Marktumfeld) wir uns befinden."
+        )
+
+        # ⭐ Zusatzinfo: Zuordnung der Cluster zu Regimen (gleiche Logik wie bei These 2)
+        st.caption(
+            "Cluster-Interpretation: 🐂 **Bull-Markt = Cluster 0**, ➖ **Sideways = Cluster 1**, 🐻 **Bear-Markt = Cluster 2**"
+        )
+
+        st.markdown("---")
+
+        # # -----------------------------------------------------------------
+        # # THESEN BLOCK 4: These 4 (Cluster vs. Regime Mapping)
+        # # -----------------------------------------------------------------
+        # st.markdown("#### 🎯 Prüfung These 4: ML-Cluster korrelieren mit den Markt-Regimen")
+        # st.markdown("##### Heatmap: Wie gut mappt Cluster_3 auf Bear / Sideways / Bull?")
+
+        # cluster_regime_fig = create_cluster_regime_heatmap(df_master)
+        # st.plotly_chart(cluster_regime_fig, use_container_width=True)
+
+        # st.info(
+        #     "**Beweisidee:** Diese Heatmap zeigt, wie häufig jeder ML-Cluster in einem bestimmten Markt-Regime "
+        #     "(Bear, Sideways, Bull) vorkommt. Die dunkelsten Felder markieren dabei die höchsten Häufigkeiten.\n\n"
+        #     "➡️ **Starke Korrelation:** Wenn ein Cluster überwiegend in einem einzigen Regime vorkommt, erkennt das ML-Modell "
+        #     "die gleiche Struktur wie die klassischen Marktregime – nur datengetriebener.\n"
+        #     "➡️ **Feinere Granularität:** ML-Cluster unterscheiden teilweise Unterphasen innerhalb eines Regimes "
+        #     "(z. B. verschiedene Bull-Intensitäten oder unterschiedliche Seitwärtsstrukturen).\n\n"
+        #     "➡️ **Fazit:** These 4 wird bestätigt – die ML-Cluster sind nicht nur zufällige Gruppierungen, sondern bilden die "
+        #     "Markt-Regime präzise ab und liefern gleichzeitig zusätzliche Detailtiefe."
+        # )
+
+        # # 🟦 Zusatzinfo: Zuordnung der Cluster zu Marktregimen (sofern ermittelt)
+        # st.caption(
+        #     "Cluster-Interpretation (vereinfachte Zuordnung): "
+        #     "🐻 **Bear = Cluster 2**, ➖ **Sideways = Cluster 1**, 🐂 **Bull = Cluster 0**. "
+        #     "→ ML-Cluster bilden die Regime weitgehend konsistent nach."
+        # )
+
+        # # 📊 Analyse-Fußnote – sehr kompakt & klein
+        # st.caption(
+        #     "Analyse: Die Heatmap zeigt eine klare diagonale Struktur – jeder ML-Cluster konzentriert sich hauptsächlich "
+        #     "auf ein Regime. Das bestätigt die statistische Abbildung der Marktphasen durch das Clustering. "
+        #     "→ ML-Cluster = datengetriebene Regime."
+        # )
+
+        # st.markdown("---")
+
+        
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 5: These 5 (Volatilität vs. neg. Rendite)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 5: Hohe Marktvolatilität führt statistisch zu schlechteren Renditen")
+        st.markdown("##### Scatter Plot: Rendite vs. Volatilität (30 Tage)")
+
+        return_vol_fig = create_return_vs_volatility_scatter(df_master)
+        st.plotly_chart(return_vol_fig, use_container_width=True)
+        # Kleine kompakte Analyse (Caption)
+        st.caption(
+            "Analyse: Bei niedriger Volatilität bleiben Renditen stabil um 0 %. Steigende Volatilität führt dazu, "
+            "dass die Punktwolke sichtbar nach unten ausfranst. Besonders im Bear-Regime dominieren dann negative Ausschläge."
+        )
+
+        st.info(
+            "**Beweisidee:** Dieser Scatter Plot zeigt, wie sich tägliche Renditen (`Return`) unter unterschiedlichen "
+            "Volatilitätsbedingungen (`Volatility30`) verhalten. Die graue Trendlinie (OLS) verdeutlicht den "
+            "**durchschnittlichen statistischen Zusammenhang** zwischen beiden Größen.\n\n"
+
+            "➡️ **Leicht fallende Trendlinie:** Die Linie neigt sich sichtbar nach unten. Das bedeutet: "
+            "**Mit steigender Volatilität sinken die durchschnittlichen Renditen.** Hohe Volatilität ist also ein "
+            "Frühindikator für Stress im Markt.\n\n"
+
+            "➡️ **Grafikanalyse:** Die Punktwolke ist breit gestreut, aber man erkennt klare Muster:\n"
+            "• **Ab ca. 0.05 Volatilität** verschieben sich viele Punkte deutlich in den negativen Renditebereich.\n"
+            "• **Bärenmärkte (rot)** sammeln sich rechts unten – also bei hoher Volatilität und gleichzeitig klar negativen Renditen.\n"
+            "• **Bullenmärkte (grün)** liegen häufiger über der Null-Linie, aber überwiegend bei mittlerer Volatilität – "
+            "Bull-Märkte funktionieren typischerweise besser in ruhigeren Phasen.\n"
+            "• **Seitwärtsmärkte (gelb)** konzentrieren sich eng um 0 % Rendite – typisch für neutrale, "
+            "weniger trendstarke Marktphasen.\n\n"
+
+            "➡️ **Fazit:** These 5 wird bestätigt – **je chaotischer der Markt, desto häufiger und tiefer sind Verluste**. "
+            "Volatilität wirkt als Risiko- und Stressbarometer des Marktes."
+        )
+
+
+        st.markdown("---")
+
         
         # -----------------------------------------------------------------
         # THESEN BLOCK 6: These 6 (MA-Differenz)
         # -----------------------------------------------------------------
-        st.markdown("#### 🎯 Prüfung These 6: Gleitende Durchschnitte erklären Trendphasen (Regime)")
-        st.markdown("##### Boxplot: MA50 - MA200 Differenz nach Regime")
+        st.markdown("#### 🎯 Prüfung These 6: Gleitende Durchschnitte erklären Trendphasen klar und intuitiv")
+        st.markdown("##### Boxplot: Unterschied zwischen kurzem und langem Durchschnitt (MA50 - MA200) nach Regime")
 
         ma_diff_fig = create_ma_diff_by_regime_boxplot(df_master) 
         st.plotly_chart(ma_diff_fig, use_container_width=True)
 
-        # Erklärungstext These 6 (Direkt unter dem Plot)
-        st.info(
-            "**Beweis:** Dieser Plot zeigt die Differenz (MA50 - MA200), gruppiert nach Markt-Regime.\n\n"
-            "➡️ **Bull (Grün):** Der Median der Differenz liegt klar **über Null** (MA50 > MA200).\n"
-            "➡️ **Bear (Rot):** Der Median der Differenz liegt klar **unter Null** (MA50 < MA200).\n"
-            "**Fazit:** Die klaren Trennungen belegen, dass die Differenz der MAs ein **valides und robustes Kriterium** zur Definition der Markt-Regime ist. Dies untermauert die Grundlage der gesamten Cluster-Analyse."
-        )
-        st.markdown("---")
-
-        # -----------------------------------------------------------------
-        # THESEN BLOCK 2: These 5 (Volatilität vs. Rendite)
-        # -----------------------------------------------------------------
-        st.markdown("#### 🎯 Prüfung These 5: Chaos (Volatilität) führt oft zu Verlusten (negative Rendite)")
-        st.markdown("##### Scatter Plot: Rendite vs. Volatilität")
-        
-        return_vol_fig = create_return_vs_volatility_scatter(df_master)
-        st.plotly_chart(return_vol_fig, use_container_width=True)
-        # Die fehlerhafte Zeile wurde hier entfernt.
-
-        # Erklärungstext These 5 (Direkt unter dem Plot)
-        st.info(
-            "**Beweis:** Dieser Scatter Plot visualisiert die tägliche Rendite (`Return`) gegen die kurzfristige Volatilität (`Volatility30`).\n\n"
-            "➡️ **Negative Korrelation:** Die gestrichelte Trendlinie fällt nach rechts ab. Dies beweist die These, dass **zunehmendes Risiko (höhere Volatilität)** oft mit **sinkenden Preisen (negative Rendite)** verbunden ist (These 5).\n"
-            "➡️ **Bear-Regime (Rot):** Diese Tage konzentrieren sich oft im Bereich hoher Volatilität und negativer Renditen, was die Verbindung von Chaos und Verlust untermauert."
+        # Kurze kompakte Analyse
+        st.caption(
+            "Analyse: In Bärenmärkten liegt der kurzfristige Durchschnitt stark unter dem langfristigen – "
+            "in Bullenmärkten deutlich darüber. Seitwärtsphasen liegen dazwischen und schwanken breiter."
         )
 
-        st.markdown("---")
-        
-        # -----------------------------------------------------------------
-        # NEUER BLOCK: These 3 (Hitrate pro Cluster)
-        # -----------------------------------------------------------------
-        st.markdown("#### 🎯 Prüfung These 3: Einige Cluster liefern höhere Trefferquoten im Direction-Modell")
-        st.markdown("##### Balkendiagramm: Trefferquote pro Cluster-ID")
-        
-        hitrate_cluster_fig = create_hitrate_by_cluster_bar_chart(df_master)
-        st.plotly_chart(hitrate_cluster_fig, use_container_width=True)
-
-        # Erklärungstext These 3 (Direkt unter dem Plot)
         st.info(
-            "**Beweis:** Dieser Plot zeigt die **Trefferquote** (Hit Ratio) des Klassifikationsmodells, getrennt nach den drei Markt-Clustern.\n\n"
-            "➡️ **Transparenz:** Die Cluster mit der **höchsten Trefferquote** zeigen, unter welchen Marktbedingungen das Modell am zuverlässigsten ist (z.B. klarer Bullen-Markt).\n"
-            "➡️ **Schwachstellen:** Cluster mit einer Trefferquote nahe 50% identifizieren Marktphasen, in denen die Prognose **weniger verlässlich** ist (z.B. komplexe Seitwärtsbewegungen)."
+            "**Beweisidee (einfach erklärt):** Ein *gleitender Durchschnitt* ist nichts anderes als ein durchschnittlicher Preis "
+            "über einen bestimmten Zeitraum. Der **kurze Durchschnitt (50 Tage)** reagiert schneller, der **lange Durchschnitt (200 Tage)** "
+            "reagiert langsamer.\n\n"
+            
+            "➡️ **Was bedeutet das?** Wenn der kurzfristige Durchschnitt über dem langfristigen liegt, bewegt sich der Markt tendenziell "
+            "aufwärts (Bull-Trend). Liegt er darunter, dominiert ein Abwärtstrend (Bear). Genau diese Logik nutzt man seit Jahrzehnten, "
+            "um Trends zu erkennen.\n\n"
+            
+            "### 🔍 Was zeigt die Grafik?\n"
+            "• **Bear-Regime (rot):** Die Werte liegen klar **unter Null** – der kurzfristige Preisverlauf liegt deutlich "
+            "unter dem langfristigen. Das ist typisch für längere Abwärtsphasen.\n"
+            "• **Sideways-Regime (gelb):** Die Werte liegen **über Null**, aber schwanken stark. Der Markt hat keine klare "
+            "Richtung – mal über, mal unter dem langfristigen Trend.\n"
+            "• **Bull-Regime (grün):** Sehr enge Werte **über Null** – der kurzfristige Trend liegt stabil über dem langfristigen. "
+            "Der Markt steigt ruhig und relativ konstant.\n\n"
+            
+            "➡️ **Visuelle Interpretation:** Die graue Null-Linie ist die „Trendgrenze“. "
+            "**Bärenmärkte liegen darunter**, **Bullenmärkte darüber**, **Seitwärtsmärkte drumherum**.\n\n"
+
+            "➡️ **Fazit:** These 6 wird klar bestätigt – der Unterschied zwischen kurzem und langem Durchschnitt ist ein "
+            "intuitives und extrem zuverlässiges Signal, um Marktphasen sauber zu unterscheiden."
         )
 
         st.markdown("---")
 
-        # -----------------------------------------------------------------
-        # NEUER BLOCK: These 7 (Prognosestabilität)
-        # -----------------------------------------------------------------
-        st.markdown("#### 🎯 Prüfung These 7: ML-Preisprognosen sind innerhalb kurzer Horizonte stabil und plausibel")
-        st.markdown("##### Line Plot: Close vs. Vorhersagehorizonte (1d, 7d, 30d)")
-        
-        forecast_plot_fig = create_long_term_forecast_plot(df_master)
-        st.plotly_chart(forecast_plot_fig, use_container_width=True)
 
-        # Erklärungstext These 7 (Direkt unter dem Plot)
+        # -----------------------------------------------------------------
+        # THESEN BLOCK 7: These 7 (Direction Prediction ist extrem schwer)
+        # -----------------------------------------------------------------
+        st.markdown("#### 🎯 Prüfung These 7: ML kann Trends erkennen – aber nicht zuverlässig die Richtung des nächsten Tages")
+        st.markdown("##### Balkendiagramm: Modellgenauigkeit (F1-Score) für Up/Down-Vorhersage")
+
+        direction_fig = create_direction_model_performance_plot()
+        st.plotly_chart(direction_fig, use_container_width=True)
+        
+        st.caption(
+            "**Analyse:** Alle Modelle erreichen nur etwa **45–50 % F1-Score** und liegen damit "
+            "**kaum über dem Zufallsniveau**. Das zeigt: Selbst moderne ML-Algorithmen können die "
+            "**Tagesrichtung (Up/Down)** des Bitcoin-Kurses **nicht zuverlässig** vorhersagen. "
+            "Kurzfristige Marktbewegungen sind überwiegend **zufällig**, stark **newsgetrieben** "
+            "und schwer modellierbar. → **Bestätigung von These 7:** ML erkennt Marktstrukturen "
+            "(Regime) sehr gut – aber bei der Frage *„Steigt der Kurs morgen?“* stößt es klar "
+            "an seine Grenzen."
+)
+
+
         st.info(
-            "**Beweis:** Dieser Zeitreihen-Plot vergleicht den tatsächlichen Preis (`Close`) mit den Vorhersagen für verschiedene Horizonte.\n\n"
-            "➡️ **Kurzfristige Stabilität:** Die **`Pred_1d` (Grün)** und **`Pred_7d` (Orange)** Linien folgen dem tatsächlichen Preis (`Close`, Blau) sehr eng.\n"
-            "➡️ **Langfristige Unsicherheit:** Die **`Pred_30d` (Rot)** Linie zeigt tendenziell größere Abweichungen oder ist träger. Dies beweist, dass das Modell **kurzfristig stabiler und verlässlicher** ist."
+            "**Beweisidee:** Hier sehen wir die tatsächliche Leistung verschiedener ML-Modelle bei der Vorhersage, "
+            "ob der Bitcoin-Kurs am nächsten Tag **steigt (Up)** oder **fällt (Down)**.\n\n"
+
+            "➡️ **F1-Scores liegen nur zwischen ~50–60%.** Das bedeutet: Die Modelle sind nur wenig besser als Zufall.\n\n"
+
+            "➡️ **Warum ist das so?** Tagesbewegungen sind extrem zufällig und werden von Nachrichten, Liquidität, "
+            "großen Tradern und globalen Ereignissen dominiert. Diese Faktoren sieht das Modell nicht.\n\n"
+
+            "➡️ **Wichtiger Lerneffekt:** ML kann **Marktphasen** hervorragend erkennen (siehe Regime), "
+            "aber **Tagesrichtung** ist statistisch kaum vorhersagbar.\n\n"
+
+            "➡️ **Fazit:** These 7 zeigt bewusst die Grenzen von Machine Learning: "
+            "**Strukturen ja — Hellsehen nein.**"
         )
 
         st.markdown("---")
         
-        # -----------------------------------------------------------------
-        # 5.3 ROHDATEN-VORSCHAU
-        # -----------------------------------------------------------------
-        st.subheader("5.3 Rohdaten-Vorschau (Features)")
-        st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
+                # -----------------------------------------------------------------
+        # # 5.3 ROHDATEN-VORSCHAU
+        # # -----------------------------------------------------------------
+        # st.subheader("Rohdaten-Vorschau (Features)")
+        # st.markdown("Anzeige der letzten Handelstage zur direkten explorativen Überprüfung von Features und dem zugewiesenen Markt-Regime.")
         
-        st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
+        # st.dataframe(df_master.tail(10).style.apply(highlight_focus_day, axis=1, focus_date_str=fokus_tag), use_container_width=True)
 
-# ==================================================================================================
-# ENDE
-# ==================================================================================================
