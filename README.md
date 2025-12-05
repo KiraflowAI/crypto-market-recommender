@@ -123,24 +123,6 @@ Dieses Projekt nutzt frei verfügbare historische Daten, u. a.:
 
 Bitcoin OHLCV (1D)
 
-VIX Index
-
-S&P500 (^GSPC)
-
-NASDAQ (^NDX)
-
-DAX (^GDAXI)
-
-Dow Jones (^DJI)
-
-Keine API-Keys erforderlich.
-
-📊 Datenquellen
-
-Dieses Projekt nutzt frei verfügbare historische Daten, u. a.:
-
-Bitcoin OHLCV (1D)
-
 Keine API-Keys erforderlich.
 
 🧠 Modelle im Projekt
